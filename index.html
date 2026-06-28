@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v153</title>
+  <title>원형 아레나 v154</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v153</h1>
+    <h1 id="mainTitle">원형 아레나 v154</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1295,6 +1295,7 @@
     }
 
     const patchNotes = [
+      "v154: 레온 검격 판정을 실제 검날 충돌로 변경하고, 전설검기를 검격 대체 투사체로 수정.",
       "v153: 레온 검격 발동 중 상태/쿨타임 게이지 오류 수정. 모션 시간이 실제 재사용 간격에 반영된다.",
       "v152: 레온 성장 25초화, 시골소년 피해경감, 검격 예고/휘두르기/상태창 게이지 수정.",
       "v151: 설명문 압축, 레온 검격/검기/회복 게이지 수정, 더미와 전투분석 창 추가.",
@@ -1942,7 +1943,7 @@
       fighters = [];
       spawnTeamFighter("A");
       spawnTeamFighter("B");
-      log(`팀전 시작! A팀 ${teamA.length}명 vs B팀 ${teamB.length}명 · 교대식 전투 · v153`, "시작");
+      log(`팀전 시작! A팀 ${teamA.length}명 vs B팀 ${teamB.length}명 · 교대식 전투 · v154`, "시작");
       updateHud();
       updateStatusPanel();
     }
@@ -1964,7 +1965,7 @@
       teamState = null;
       const positions = spawnPositions(chosen.length);
       fighters = chosen.map((c, i) => makeFighter(c, positions[i], i));
-      log(`전투 시작! 참가자 ${chosen.length}명 · 맵 크기 ${arena.size}×${arena.size} · 기본공격 없음 · 13명+더미 · v153`, "시작");
+      log(`전투 시작! 참가자 ${chosen.length}명 · 맵 크기 ${arena.size}×${arena.size} · 기본공격 없음 · 13명+더미 · v154`, "시작");
       updateHud();
       updateStatusPanel();
     }
@@ -2050,7 +2051,7 @@
       f.heroRegenTimer = Math.max(f.heroRegenTimer || 0, 5.0);
       f.heroRegenTick = Math.min(f.heroRegenTick || 0, 0.05);
       f.heroRegenTicksLeft = 10;
-      f.heroNextLegendHealAt = battleTime + 30;
+      f.heroNextLegendHealAt = battleTime + 20;
       spawnFloatingText(f.x, f.y - f.r - 48, "전설회복", "#fde68a");
       spawnBlast(f.x, f.y, 64, "#fbbf24");
     }
@@ -2143,7 +2144,7 @@
         if (stage >= 4 && previousStage < 4) {
           f.heroCircleCount = 0;
           f.heroBeamCount = 0;
-          f.heroNextLegendHealAt = battleTime + 30;
+          f.heroNextLegendHealAt = battleTime + 20;
           startHeroLegendRegen(f);
         }
 
@@ -2155,7 +2156,7 @@
       }
 
       if (stage >= 4 && battleTime >= (f.heroNextLegendHealAt || 999999)) {
-        f.heroNextLegendHealAt = battleTime + 30;
+        f.heroNextLegendHealAt = battleTime + 20;
         startHeroLegendRegen(f);
       }
 
@@ -2227,21 +2228,60 @@
 
 
 
-    function drawHeroSwordSwing(z, start, end) {
+    function heroSwordSwingState(z) {
       const stage = Math.max(1, z.heroStage || 1);
+      const start = z.startAngle ?? (z.angle - (z.sweep || Math.PI / 4));
+      const end = z.endAngle ?? (z.angle + (z.sweep || Math.PI / 4));
       const swingMax = Math.max(0.1, z.swingMax || 0.42);
       const p = clamp(1 - z.life / swingMax, 0, 1);
       const eased = 1 - Math.pow(1 - p, 1.25);
       const current = start + (end - start) * eased;
-      const tail = Math.max(start, current - (end - start) * (stage >= 4 ? 0.34 : stage >= 3 ? 0.27 : 0.20));
-      const bladeStart = z.r * 0.16;
-      const bladeEnd = z.r * (stage === 1 ? 0.66 : stage === 2 ? 0.76 : stage === 3 ? 0.86 : 0.92);
-      const main = stage === 1 ? "#cbd5e1" : stage === 2 ? "#93c5fd" : stage === 3 ? "#facc15" : "#fde68a";
+      const bladeStart = z.r * 0.15;
+      const bladeEnd = z.r * (stage === 1 ? 0.66 : stage === 2 ? 0.78 : 0.90);
+      const bladeWidth = stage === 1 ? 8 : stage === 2 ? 11 : 14;
+      return { stage, start, end, current, bladeStart, bladeEnd, bladeWidth, p, eased };
+    }
+
+    function hitTargetsWithHeroSword(source, z) {
+      if (!source || !source.alive) return;
+      if (!z.hitIds) z.hitIds = new Set();
+      const s = heroSwordSwingState(z);
+      const x1 = z.x + Math.cos(s.current) * s.bladeStart;
+      const y1 = z.y + Math.sin(s.current) * s.bladeStart;
+      const x2 = z.x + Math.cos(s.current) * s.bladeEnd;
+      const y2 = z.y + Math.sin(s.current) * s.bladeEnd;
+      enemiesOf(source).forEach(e => {
+        if (z.hitIds.has(e.id)) return;
+        const d = distancePointToSegment(e.x, e.y, x1, y1, x2, y2);
+        if (d <= e.r + s.bladeWidth) {
+          const dealt = damage(e, z.power, source, z.reason || "검격");
+          if (dealt > 0) {
+            z.hitIds.add(e.id);
+            spawnHitFlash(e.x, e.y, z.color, 44 + s.stage * 5);
+            if (z.applyBleed) applyBleed(e, source, 2, 2.2, 0.50, 4);
+            const dx = e.x - z.x;
+            const dy = e.y - z.y;
+            const distToSource = Math.hypot(dx, dy) || 1;
+            const nx = dx / distToSource;
+            const ny = dy / distToSource;
+            e.vx += nx * (z.knock || 120);
+            e.vy += ny * (z.knock || 120);
+            capVelocity(e, e.baseSpeed * 44 * 1.55);
+          }
+        }
+      });
+    }
+
+    function drawHeroSwordSwing(z, start, end) {
+      const s = heroSwordSwingState(z);
+      const stage = s.stage;
+      const current = s.current;
+      const tail = Math.max(s.start, current - (s.end - s.start) * (stage >= 3 ? 0.30 : 0.22));
+      const main = stage === 1 ? "#cbd5e1" : stage === 2 ? "#93c5fd" : "#facc15";
       const dark = stage === 1 ? "#334155" : stage === 2 ? "#1e3a8a" : "#78350f";
       const edge = stage >= 3 ? "#ffffff" : "#dbeafe";
 
-      // 넓어진 잔상: 실제로 휘두르는 느낌을 길게 보여준다.
-      ctx.globalAlpha = stage >= 4 ? 0.30 : 0.20;
+      ctx.globalAlpha = stage >= 3 ? 0.24 : 0.17;
       ctx.strokeStyle = stage >= 3 ? "#f59e0b" : "#1d4ed8";
       ctx.lineWidth = stage >= 3 ? 15 : 10;
       ctx.lineCap = "round";
@@ -2252,88 +2292,102 @@
       ctx.save();
       ctx.translate(z.x, z.y);
       ctx.rotate(current);
-      const w = stage === 1 ? 4.8 : stage === 2 ? 7 : stage === 3 ? 10 : 12;
-      const tip = stage >= 3 ? 11 : 5;
+
+      const bladeStart = s.bladeStart;
+      const bladeEnd = s.bladeEnd;
+      const w = stage === 1 ? 5.2 : stage === 2 ? 7.8 : 11;
+      const tip = stage === 1 ? 8 : stage === 2 ? 12 : 16;
+      const guardX = bladeStart - 4;
+      const handleX = bladeStart - 25;
+
+      // 손잡이
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#111827";
+      ctx.strokeStyle = "#020617";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(handleX, -3.4, 24, 6.8, 3) : ctx.rect(handleX, -3.4, 24, 6.8);
+      ctx.fill();
+      ctx.stroke();
+
+      // 손잡이 끝 장식
+      ctx.fillStyle = stage >= 3 ? "#f59e0b" : "#64748b";
+      ctx.beginPath();
+      ctx.arc(handleX - 3, 0, stage >= 3 ? 5.0 : 4.0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 크로스가드
+      const guardColor = stage >= 3 ? "#facc15" : (stage === 2 ? "#60a5fa" : "#94a3b8");
+      ctx.fillStyle = guardColor;
+      ctx.strokeStyle = "#020617";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(guardX - 3, -13 - stage * 2);
+      ctx.lineTo(guardX + 5, -9 - stage);
+      ctx.lineTo(guardX + 5, 9 + stage);
+      ctx.lineTo(guardX - 3, 13 + stage * 2);
+      ctx.lineTo(guardX - 8, 8);
+      ctx.lineTo(guardX - 8, -8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 검날
       const grad = ctx.createLinearGradient(bladeStart, 0, bladeEnd, 0);
       grad.addColorStop(0, dark);
-      grad.addColorStop(0.44, main);
+      grad.addColorStop(0.46, main);
       grad.addColorStop(1, edge);
-
       ctx.shadowColor = main;
-      ctx.shadowBlur = stage >= 4 ? 24 : stage >= 3 ? 16 : 9;
+      ctx.shadowBlur = stage >= 3 ? 18 : 10;
       ctx.fillStyle = grad;
       ctx.strokeStyle = stage >= 3 ? "#fef3c7" : "#bfdbfe";
-      ctx.lineWidth = stage >= 3 ? 2.1 : 1.2;
+      ctx.lineWidth = stage >= 3 ? 2.2 : 1.4;
       ctx.globalAlpha = 0.98;
 
       if (stage === 1) {
-        // 초보검사: 짧고 단순한 철검
         ctx.beginPath();
         ctx.moveTo(bladeStart, -w);
-        ctx.lineTo(bladeEnd, -w * 0.45);
+        ctx.lineTo(bladeEnd, -w * 0.48);
         ctx.lineTo(bladeEnd + tip, 0);
-        ctx.lineTo(bladeEnd, w * 0.45);
+        ctx.lineTo(bladeEnd, w * 0.48);
         ctx.lineTo(bladeStart, w);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
       } else if (stage === 2) {
-        // 견습기사: 길어진 푸른 강철검
         ctx.beginPath();
         ctx.moveTo(bladeStart, -w);
-        ctx.lineTo(bladeEnd - 12, -w * 0.62);
+        ctx.lineTo(bladeEnd - 14, -w * 0.72);
         ctx.lineTo(bladeEnd + tip, 0);
-        ctx.lineTo(bladeEnd - 12, w * 0.62);
+        ctx.lineTo(bladeEnd - 14, w * 0.72);
         ctx.lineTo(bladeStart, w);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
       } else {
-        // 기사/전설: 넓은 영웅검
         ctx.beginPath();
         ctx.moveTo(bladeStart, -w);
-        ctx.lineTo(bladeEnd - 16, -w * 0.70);
-        ctx.lineTo(bladeEnd - 5, -w * 0.22);
+        ctx.lineTo(bladeEnd - 19, -w * 0.74);
+        ctx.lineTo(bladeEnd - 6, -w * 0.24);
         ctx.lineTo(bladeEnd + tip, 0);
-        ctx.lineTo(bladeEnd - 5, w * 0.22);
-        ctx.lineTo(bladeEnd - 16, w * 0.70);
+        ctx.lineTo(bladeEnd - 6, w * 0.24);
+        ctx.lineTo(bladeEnd - 19, w * 0.74);
         ctx.lineTo(bladeStart, w);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-
-        ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = stage >= 4 ? "#60a5fa" : "#ffffff";
-        ctx.lineWidth = stage >= 4 ? 3 : 1.5;
-        ctx.beginPath();
-        ctx.moveTo(bladeStart + 12, 0);
-        ctx.lineTo(bladeEnd - 12, 0);
-        ctx.stroke();
       }
 
-      // 손잡이/가드도 단계별로 변화
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#111827";
-      ctx.strokeStyle = stage >= 3 ? "#facc15" : "#60a5fa";
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(bladeStart - 18, -3.5, 22, 7);
-      ctx.strokeRect(bladeStart - 18, -3.5, 22, 7);
-      if (stage >= 2) {
-        ctx.fillStyle = stage >= 3 ? "#92400e" : "#1e40af";
-        ctx.fillRect(bladeStart - 4, -13 - stage, 8, 26 + stage * 2);
-      }
-      if (stage >= 4) {
-        ctx.globalAlpha = 0.45;
-        ctx.strokeStyle = "#2563eb";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(bladeStart + 18, -w * 1.35);
-        ctx.lineTo(bladeEnd - 18, -w * 0.82);
-        ctx.moveTo(bladeStart + 18, w * 1.35);
-        ctx.lineTo(bladeEnd - 18, w * 0.82);
-        ctx.stroke();
-      }
+      // 중앙 홈
+      ctx.globalAlpha = 0.58;
+      ctx.strokeStyle = stage >= 3 ? "#ffffff" : "#e0f2fe";
+      ctx.lineWidth = stage >= 3 ? 2.2 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(bladeStart + 10, 0);
+      ctx.lineTo(bladeEnd - 12, 0);
+      ctx.stroke();
       ctx.restore();
     }
 
@@ -2375,8 +2429,8 @@
         const slashBar = stage > 0 ? `<div class="bar"><div class="bar-fill skill-fill" style="width:${slashRatio * 100}%"></div></div>` : "";
 
         if (stage >= 4) {
-          const remain = Math.max(0, (f.heroNextLegendHealAt || battleTime + 30) - battleTime);
-          current = clamp(1 - remain / 30, 0, 1);
+          const remain = Math.max(0, (f.heroNextLegendHealAt || battleTime + 20) - battleTime);
+          current = clamp(1 - remain / 20, 0, 1);
           const beam = Math.max(0, f.heroBeamCount || 0);
           const beamRatio = clamp(beam / 3, 0, 1);
           extraBarsHtml = `${slashBar}<div class="bar"><div class="bar-fill condition-fill" style="width:${beamRatio * 100}%"></div></div>`;
@@ -5002,6 +5056,8 @@
         }
 
         case "hero_leon": {
+          let usedHeroSlash = false;
+          let heroAnimLock = 0;
           updateHeroLeonGrowth(f, 0);
           const stage = Math.max(0, f.heroStage || 0);
           const info = heroLeonInfo(stage);
@@ -5016,102 +5072,99 @@
             const aimX = target.x;
             const aimY = target.y;
             const angle = Math.atan2(aimY - f.y, aimX - f.x);
-            let range = info.range;
-            let sweep = 0.48;
-            let delay = 0.34;
-            let swing = 0.42;
-            let power = Math.max(5, Math.round(f.attack * 0.90));
-            let knock = 120;
-            let reason = "초보검사검격";
-            let applySlashBleed = false;
-
-            if (stage === 1) {
-              range = 86;
-              sweep = 0.44;
-              delay = 0.34;
-              swing = 0.42;
-              power = Math.max(5, Math.round(f.attack * 0.92));
-              knock = 130;
-            } else if (stage === 2) {
-              range = 118;
-              sweep = 0.74;
-              delay = 0.34;
-              swing = 0.48;
-              power = Math.max(6, Math.round(f.attack * 0.98));
-              knock = 145;
-              reason = "견습기사검격";
-            } else if (stage === 3) {
-              range = 130;
-              sweep = Math.PI / 2;
-              delay = 0.24;
-              swing = 0.48;
-              power = Math.max(7, Math.round(f.attack * 1.04));
-              knock = 170;
-              reason = "기사검격";
-              applySlashBleed = true;
-            } else {
-              range = 134;
-              sweep = Math.PI;
-              delay = 0.28;
-              swing = 0.60;
-              power = Math.max(8, Math.round(f.attack * 0.96));
-              knock = 130;
-              reason = "전설원공격";
-            }
-
-            f.swordTimer = 0;
-            f.swordAngle = angle;
-
-            zones.push({
-              kind: "slash",
-              sourceId: f.id,
-              x: f.x,
-              y: f.y,
-              angle,
-              r: range,
-              delay,
-              life: delay + swing,
-              maxLife: delay + swing,
-              tick: 0,
-              color: info.slash,
-              power,
-              sweep,
-              reason,
-              followSource: true,
-              triggered: false,
-              applyBleed: applySlashBleed,
-              knock,
-              quadrant: true,
-              heroSlash: true,
-              heroStage: stage
-            });
-            usedHeroSlash = true;
-            heroAnimLock = delay + swing;
-            f.heroSlashLock = Math.max(f.heroSlashLock || 0, heroAnimLock);
 
             if (stage >= 4) {
-              f.heroCircleCount = (f.heroCircleCount || 0) + 1;
-              if (f.heroCircleCount % 4 === 0) {
-                if ((f.heroBeamCount || 0) >= 3) {
-                  f.heroBeamCount = 0;
-                  triggerHeroDeathFault(f, angle);
-                } else {
-                  const beamAngle = Math.atan2(aimY - f.y, aimX - f.x);
-                  shootAngle(f, beamAngle, Math.max(7, Math.round(f.attack * 0.86)), 5.8, 7.5, "전설검기", info.slash, {
-                    life: 2.25,
-                    pierce: 1,
-                    trail: 22,
-                    glow: 44,
-                    shape: "heroBlade"
-                  });
-                  f.heroBeamCount = (f.heroBeamCount || 0) + 1;
-                  spawnFloatingText(f.x, f.y - f.r - 54, `검기 ${f.heroBeamCount}/3`, info.slash);
-                }
+              if ((f.heroBeamCount || 0) >= 3) {
+                f.heroBeamCount = 0;
+                triggerHeroDeathFault(f, angle);
+                usedHeroSlash = true;
+                heroAnimLock = 0.45;
+                f.heroSlashLock = Math.max(f.heroSlashLock || 0, heroAnimLock);
+                log(`${sourceName} 데스폴트`, "스킬");
+              } else {
+                shootAngle(f, angle, Math.max(9, Math.round(f.attack * 1.10)), 6.2, 15.5, "전설검기", "#60a5fa", {
+                  life: 2.45,
+                  pierce: 2,
+                  trail: 28,
+                  glow: 62,
+                  shape: "heroBlade"
+                });
+                f.heroBeamCount = (f.heroBeamCount || 0) + 1;
+                spawnFloatingText(f.x, f.y - f.r - 54, `오라블레이드 ${f.heroBeamCount}/3`, "#bfdbfe");
+                spawnParticles(f.x, f.y, "#60a5fa", 12);
+                usedHeroSlash = true;
+                heroAnimLock = 0.38;
+                f.heroSlashLock = Math.max(f.heroSlashLock || 0, heroAnimLock);
+                log(`${sourceName} 오라블레이드`, "스킬");
               }
-            }
+            } else {
+              let range = info.range;
+              let sweep = 0.48;
+              let delay = 0.34;
+              let swing = 0.52;
+              let power = Math.max(5, Math.round(f.attack * 0.90));
+              let knock = 120;
+              let reason = "초보검사검격";
+              let applySlashBleed = false;
 
-            if (stage >= 3) spawnParticles(f.x, f.y, info.particle, 8 + stage * 3);
-            log(`${sourceName} ${reason}`, "스킬");
+              if (stage === 1) {
+                range = 88;
+                sweep = 0.44;
+                delay = 0.34;
+                swing = 0.54;
+                power = Math.max(5, Math.round(f.attack * 0.92));
+                knock = 130;
+              } else if (stage === 2) {
+                range = 122;
+                sweep = 0.74;
+                delay = 0.34;
+                swing = 0.60;
+                power = Math.max(6, Math.round(f.attack * 0.98));
+                knock = 145;
+                reason = "견습기사검격";
+              } else if (stage === 3) {
+                range = 136;
+                sweep = Math.PI / 2;
+                delay = 0.22;
+                swing = 0.64;
+                power = Math.max(7, Math.round(f.attack * 1.04));
+                knock = 170;
+                reason = "기사검격";
+                applySlashBleed = true;
+              }
+
+              f.swordTimer = 0;
+              f.swordAngle = angle;
+              zones.push({
+                kind: "slash",
+                sourceId: f.id,
+                x: f.x,
+                y: f.y,
+                angle,
+                r: range,
+                delay,
+                life: delay + swing,
+                maxLife: delay + swing,
+                tick: 0,
+                color: info.slash,
+                power,
+                sweep,
+                reason,
+                followSource: true,
+                triggered: false,
+                hitIds: new Set(),
+                applyBleed: applySlashBleed,
+                knock,
+                quadrant: true,
+                heroSlash: true,
+                heroStage: stage
+              });
+              usedHeroSlash = true;
+              heroAnimLock = delay + swing;
+              f.heroSlashLock = Math.max(f.heroSlashLock || 0, heroAnimLock);
+              if (stage >= 3) spawnParticles(f.x, f.y, info.particle, 8 + stage * 3);
+              log(`${sourceName} ${reason}`, "스킬");
+            }
           }
           if (usedHeroSlash) {
             f.skillClock = -Math.min(0.42, heroAnimLock * 0.45);
@@ -5959,7 +6012,16 @@
             log(`<strong>${escapeHtml(source.name)}</strong> 데스폴트 · ${hits}명 타격`, "스킬");
           }
         } else if (z.kind === "slash") {
-          if (!z.triggered && z.delay <= 0) {
+          if (z.heroSlash) {
+            if (!z.triggered && z.delay <= 0) {
+              z.triggered = true;
+              z.swingMax = Math.max(0.22, z.life);
+              if (!z.hitIds) z.hitIds = new Set();
+            }
+            if (z.triggered) {
+              hitTargetsWithHeroSword(source, z);
+            }
+          } else if (!z.triggered && z.delay <= 0) {
             z.triggered = true;
             if (z.quadrant) z.swingMax = Math.max(0.22, z.life);
             enemiesOf(source).forEach(e => {
@@ -7560,29 +7622,55 @@
           const a = Math.atan2(p.vy, p.vx);
           ctx.translate(p.x, p.y);
           ctx.rotate(a);
-          ctx.shadowColor = p.color;
-          ctx.shadowBlur = p.glow || 32;
-          const grad = ctx.createLinearGradient(-p.r * 3.5, 0, p.r * 4.5, 0);
-          grad.addColorStop(0, "#1e3a8a");
-          grad.addColorStop(0.45, p.color);
+          ctx.shadowColor = "#60a5fa";
+          ctx.shadowBlur = p.glow || 62;
+
+          // 전설의 용사 오라블레이드: 넓은 투사체 검기
+          const len = p.r * 6.8;
+          const half = p.r * 1.55;
+          const grad = ctx.createLinearGradient(-len * 0.45, 0, len * 0.62, 0);
+          grad.addColorStop(0, "rgba(37,99,235,.20)");
+          grad.addColorStop(0.34, "#2563eb");
+          grad.addColorStop(0.62, "#60a5fa");
+          grad.addColorStop(0.86, "#fde68a");
           grad.addColorStop(1, "#ffffff");
+
+          ctx.globalAlpha = 0.72;
+          ctx.fillStyle = "rgba(96,165,250,.32)";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, len * 0.58, half * 1.55, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.globalAlpha = 0.96;
           ctx.fillStyle = grad;
           ctx.strokeStyle = "#fef3c7";
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2.3;
           ctx.beginPath();
-          ctx.moveTo(p.r * 4.8, 0);
-          ctx.lineTo(-p.r * 1.8, -p.r * 1.25);
-          ctx.lineTo(-p.r * 0.4, 0);
-          ctx.lineTo(-p.r * 1.8, p.r * 1.25);
+          ctx.moveTo(len * 0.62, 0);
+          ctx.bezierCurveTo(len * 0.18, -half * 1.40, -len * 0.30, -half * 1.05, -len * 0.48, -half * 0.18);
+          ctx.bezierCurveTo(-len * 0.12, -half * 0.38, len * 0.12, -half * 0.22, len * 0.38, 0);
+          ctx.bezierCurveTo(len * 0.12, half * 0.22, -len * 0.12, half * 0.38, -len * 0.48, half * 0.18);
+          ctx.bezierCurveTo(-len * 0.30, half * 1.05, len * 0.18, half * 1.40, len * 0.62, 0);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
-          ctx.globalAlpha = 0.72;
+
+          ctx.globalAlpha = 0.78;
           ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 1.3;
+          ctx.lineWidth = 2.2;
           ctx.beginPath();
-          ctx.moveTo(-p.r * 0.5, 0);
-          ctx.lineTo(p.r * 3.2, 0);
+          ctx.moveTo(-len * 0.32, 0);
+          ctx.lineTo(len * 0.43, 0);
+          ctx.stroke();
+
+          ctx.globalAlpha = 0.55;
+          ctx.strokeStyle = "#fbbf24";
+          ctx.lineWidth = 3.0;
+          ctx.beginPath();
+          ctx.moveTo(-len * 0.16, -half * 0.72);
+          ctx.quadraticCurveTo(len * 0.16, -half * 0.45, len * 0.48, -half * 0.05);
+          ctx.moveTo(-len * 0.16, half * 0.72);
+          ctx.quadraticCurveTo(len * 0.16, half * 0.45, len * 0.48, half * 0.05);
           ctx.stroke();
         } else if (p.shape === "arrow") {
           const a = Math.atan2(p.vy, p.vx);
