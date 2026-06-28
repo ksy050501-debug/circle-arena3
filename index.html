@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v154</title>
+  <title>원형 아레나 v155</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v154</h1>
+    <h1 id="mainTitle">원형 아레나 v155</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -886,6 +886,8 @@
       <div class="button-row" id="simBoostRow" style="width:min(700px,100%);display:none;">
         <button class="primary" id="quickSim10Btn">자동 10전</button>
         <button class="ghost" id="quickSim100Btn">자동 100전</button>
+        <button class="ghost" id="copyMatchupBtn">전적 복사</button>
+        <button class="ghost" id="resetMatchupBtn">전적 초기화</button>
       </div>
       <p class="status" id="tipText">카드를 누르면 참가/해제됩니다. 처음에는 전원 불참 상태입니다. 인원 수에 따라 맵 크기가 자동 조절됩니다. 효과음은 기본 켜짐 상태입니다.</p>
     </section>
@@ -1002,6 +1004,7 @@
     let teamState = null;
     let fighterSerial = 0;
     let statusHpState = {};
+    let matchupHistory = [];
 
     const characters = [
       {
@@ -1295,6 +1298,7 @@
     }
 
     const patchNotes = [
+      "v155: 시뮬레이션 모드에 자동 100전 상대전적 누적, 원클릭 복사, 초기화 버튼 추가.",
       "v154: 레온 검격 판정을 실제 검날 충돌로 변경하고, 전설검기를 검격 대체 투사체로 수정.",
       "v153: 레온 검격 발동 중 상태/쿨타임 게이지 오류 수정. 모션 시간이 실제 재사용 간격에 반영된다.",
       "v152: 레온 성장 25초화, 시골소년 피해경감, 검격 예고/휘두르기/상태창 게이지 수정.",
@@ -8077,6 +8081,7 @@
         $("tipText").innerHTML = "시뮬레이션 강화 모드: 자동전과 훈련용 더미 사용 가능.";
         showOverlay("시뮬레이션 강화 모드", "자동전과 훈련용 더미가 열렸습니다.");
         renderAll();
+        updateMatchupButtons();
       }
       updateHud();
     }
@@ -8093,6 +8098,60 @@
         if (pw === "0806") setEnhancedSimMode(true);
         else if (pw !== null) showOverlay("비밀번호 오류", "강화 모드가 열리지 않았습니다.");
       }
+    }
+
+    function characterShortName(c) {
+      const name = typeof c === "string" ? c : (c?.name || "");
+      const parts = name.trim().split(/\s+/);
+      return parts[parts.length - 1] || name || "unknown";
+    }
+
+    function matchupLine(a, b, aWins, bWins, drawCount = 0) {
+      const left = characterShortName(a);
+      const right = characterShortName(b);
+      return drawCount > 0
+        ? `${left}vs.${right} ${aWins} ${drawCount} ${bWins}`
+        : `${left}vs.${right} ${aWins} ${bWins}`;
+    }
+
+    function updateMatchupButtons() {
+      const copyBtn = $("copyMatchupBtn");
+      const resetBtn = $("resetMatchupBtn");
+      if (copyBtn) copyBtn.textContent = `전적 복사(${matchupHistory.length})`;
+      if (resetBtn) resetBtn.disabled = matchupHistory.length <= 0;
+    }
+
+    async function copyMatchupHistory() {
+      if (!matchupHistory.length) {
+        showOverlay("복사할 전적 없음", "자동 100전을 돌리면 전적이 누적됩니다.");
+        return;
+      }
+      const text = matchupHistory.map(x => x.line).join("\n");
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.left = "-9999px";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+        }
+        showOverlay("전적 복사 완료", `${matchupHistory.length}개 상대전적을 복사했습니다.`);
+      } catch (err) {
+        prompt("아래 전적을 복사하세요.", text);
+      }
+    }
+
+    function resetMatchupHistory() {
+      matchupHistory = [];
+      updateMatchupButtons();
+      showOverlay("전적 초기화", "누적 상대전적을 비웠습니다.");
+      updateHud();
     }
 
     function quickWinnerLabel(chosen) {
@@ -8190,6 +8249,12 @@
       const summary = `${a.name} ${aWins}승 / ${b.name} ${bWins}승 / 무승부 ${drawCount}회 · 평균 ${avgTime}초`;
       const rateA = Math.round(aWins / count * 100);
       const rateB = Math.round(bWins / count * 100);
+
+      if (count === 100) {
+        const line = matchupLine(a, b, aWins, bWins, drawCount);
+        matchupHistory.push({ aId: a.id, bId: b.id, aWins, bWins, drawCount, line, at: Date.now() });
+        updateMatchupButtons();
+      }
 
       logs = [
         `<div><strong>[자동 ${count}전]</strong> ${escapeHtml(summary)}</div>`,
@@ -8328,6 +8393,8 @@
     $("patchNoteBtn").addEventListener("click", openPatchNotes);
     $("quickSim10Btn").addEventListener("click", runQuickSim10);
     $("quickSim100Btn").addEventListener("click", runQuickSim100);
+    $("copyMatchupBtn").addEventListener("click", copyMatchupHistory);
+    $("resetMatchupBtn").addEventListener("click", resetMatchupHistory);
     $("mainTitle").addEventListener("click", tryUnlockEnhancedMode);
     $("patchModalClose").addEventListener("click", closePatchNotes);
     $("patchModal").addEventListener("click", e => {
@@ -8339,6 +8406,7 @@
 
     renderFilters();
     renderAll();
+    updateMatchupButtons();
     draw();
     requestAnimationFrame(loop);
   </script>
