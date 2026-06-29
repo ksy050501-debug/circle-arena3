@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v155</title>
+  <title>원형 아레나 v156</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v155</h1>
+    <h1 id="mainTitle">원형 아레나 v156</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1065,7 +1065,7 @@
       {
         id: "hero_leon", name: "시골소년 레온", mark: "勇", role: "전사", color: "#64748b",
         hp: 118, attack: 8, speed: 2.55, range: 74,
-        skillName: "용사의 성장", condition: "25초마다 성장", desc: "초반 도주형. 후반 검격 강화."
+        skillName: "용사의 성장", condition: "20/23/26/29초 차등 성장", desc: "초반 방어형. 후반 검격 강화."
       },
       {
         id: "dummy_unit", name: "훈련용 더미", mark: "木", role: "더미", color: "#9ca3af",
@@ -1298,6 +1298,7 @@
     }
 
     const patchNotes = [
+      "v156: 레온 시골소년 피해경감 50%, 차등 성장시간, 기사 출혈 삭제, 배리어 증가, 검 디자인 재수정.",
       "v155: 시뮬레이션 모드에 자동 100전 상대전적 누적, 원클릭 복사, 초기화 버튼 추가.",
       "v154: 레온 검격 판정을 실제 검날 충돌로 변경하고, 전설검기를 검격 대체 투사체로 수정.",
       "v153: 레온 검격 발동 중 상태/쿨타임 게이지 오류 수정. 모션 시간이 실제 재사용 간격에 반영된다.",
@@ -1454,9 +1455,9 @@
           tip: "랜덤 벽면으로 이동한다. 사슬은 접촉 출혈 후 잠시 뒤 좁은 범위로 폭발한다."
         },
         hero_leon: {
-          damage: "초반 검격 약 7 / 후반 검격 14+ / 전설 검기",
-          tick: "30초 성장",
-          tip: "30초마다 호칭·능력치·오오라가 강화되는 후반형 전사."
+          damage: "검격 / 오라블레이드 / 데스폴트",
+          tick: "차등 성장",
+          tip: "시골소년은 피해를 줄이고, 성장 후 검격이 강화된다."
         },
         dummy_unit: {
           damage: "없음",
@@ -1947,7 +1948,7 @@
       fighters = [];
       spawnTeamFighter("A");
       spawnTeamFighter("B");
-      log(`팀전 시작! A팀 ${teamA.length}명 vs B팀 ${teamB.length}명 · 교대식 전투 · v154`, "시작");
+      log(`팀전 시작! A팀 ${teamA.length}명 vs B팀 ${teamB.length}명 · 교대식 전투 · v156`, "시작");
       updateHud();
       updateStatusPanel();
     }
@@ -1969,7 +1970,7 @@
       teamState = null;
       const positions = spawnPositions(chosen.length);
       fighters = chosen.map((c, i) => makeFighter(c, positions[i], i));
-      log(`전투 시작! 참가자 ${chosen.length}명 · 맵 크기 ${arena.size}×${arena.size} · 기본공격 없음 · 13명+더미 · v154`, "시작");
+      log(`전투 시작! 참가자 ${chosen.length}명 · 맵 크기 ${arena.size}×${arena.size} · 기본공격 없음 · 13명+더미 · v156`, "시작");
       updateHud();
       updateStatusPanel();
     }
@@ -2037,8 +2038,24 @@
       { name: "전설의 용사 레온", color: "#f59e0b", aura: "rgba(251,191,36,.74)", aura2: "rgba(37,99,235,.42)", particle: "#fbbf24", attack: 5, speed: 0.18, range: 134, hp: 18, heal: 10, slash: "#fde68a" }
     ];
 
-    function heroLeonStage() {
-      return Math.max(0, Math.min(4, Math.floor(battleTime / 25)));
+    const heroLeonStageDurations = [20, 23, 26, 29];
+    const heroLeonStageThresholds = [0, 20, 43, 69, 98];
+
+    function heroLeonStage(time = battleTime) {
+      if (time >= heroLeonStageThresholds[4]) return 4;
+      if (time >= heroLeonStageThresholds[3]) return 3;
+      if (time >= heroLeonStageThresholds[2]) return 2;
+      if (time >= heroLeonStageThresholds[1]) return 1;
+      return 0;
+    }
+
+    function heroLeonStageProgress(time = battleTime) {
+      const stage = heroLeonStage(time);
+      if (stage >= 4) return { stage, current: 1, max: 1, remain: 0 };
+      const start = heroLeonStageThresholds[stage];
+      const max = heroLeonStageDurations[stage] || 20;
+      const current = clamp(time - start, 0, max);
+      return { stage, current, max, remain: Math.max(0, max - current) };
     }
 
     function heroLeonInfo(stage = heroLeonStage()) {
@@ -2141,8 +2158,8 @@
         }
 
         if (stage >= 3 && previousStage < 3) {
-          f.heroGuardCharges = Math.max(f.heroGuardCharges || 0, 3);
-          spawnFloatingText(f.x, f.y - f.r - 58, "용사배리어 3", "#fde68a");
+          f.heroGuardCharges = Math.max(f.heroGuardCharges || 0, 5);
+          spawnFloatingText(f.x, f.y - f.r - 58, "용사배리어 5", "#fde68a");
         }
 
         if (stage >= 4 && previousStage < 4) {
@@ -2281,13 +2298,14 @@
       const stage = s.stage;
       const current = s.current;
       const tail = Math.max(s.start, current - (s.end - s.start) * (stage >= 3 ? 0.30 : 0.22));
-      const main = stage === 1 ? "#cbd5e1" : stage === 2 ? "#93c5fd" : "#facc15";
+      const main = stage === 1 ? "#cbd5e1" : stage === 2 ? "#60a5fa" : "#facc15";
       const dark = stage === 1 ? "#334155" : stage === 2 ? "#1e3a8a" : "#78350f";
       const edge = stage >= 3 ? "#ffffff" : "#dbeafe";
 
-      ctx.globalAlpha = stage >= 3 ? 0.24 : 0.17;
+      // 궤적은 얇게만 표시하고, 실제 검날이 눈에 띄도록 한다.
+      ctx.globalAlpha = stage >= 3 ? 0.18 : 0.13;
       ctx.strokeStyle = stage >= 3 ? "#f59e0b" : "#1d4ed8";
-      ctx.lineWidth = stage >= 3 ? 15 : 10;
+      ctx.lineWidth = stage >= 3 ? 10 : 7;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.arc(z.x, z.y, z.r * 0.58, tail, current);
@@ -2299,99 +2317,140 @@
 
       const bladeStart = s.bladeStart;
       const bladeEnd = s.bladeEnd;
-      const w = stage === 1 ? 5.2 : stage === 2 ? 7.8 : 11;
-      const tip = stage === 1 ? 8 : stage === 2 ? 12 : 16;
-      const guardX = bladeStart - 4;
-      const handleX = bladeStart - 25;
+      const guardX = bladeStart - 5;
+      const handleX = bladeStart - 27;
 
       // 손잡이
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
       ctx.fillStyle = "#111827";
       ctx.strokeStyle = "#020617";
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(handleX, -3.4, 24, 6.8, 3) : ctx.rect(handleX, -3.4, 24, 6.8);
-      ctx.fill();
-      ctx.stroke();
-
-      // 손잡이 끝 장식
-      ctx.fillStyle = stage >= 3 ? "#f59e0b" : "#64748b";
-      ctx.beginPath();
-      ctx.arc(handleX - 3, 0, stage >= 3 ? 5.0 : 4.0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // 크로스가드
-      const guardColor = stage >= 3 ? "#facc15" : (stage === 2 ? "#60a5fa" : "#94a3b8");
-      ctx.fillStyle = guardColor;
-      ctx.strokeStyle = "#020617";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(guardX - 3, -13 - stage * 2);
-      ctx.lineTo(guardX + 5, -9 - stage);
-      ctx.lineTo(guardX + 5, 9 + stage);
-      ctx.lineTo(guardX - 3, 13 + stage * 2);
-      ctx.lineTo(guardX - 8, 8);
-      ctx.lineTo(guardX - 8, -8);
-      ctx.closePath();
+      ctx.roundRect ? ctx.roundRect(handleX, -3.6, 25, 7.2, 3) : ctx.rect(handleX, -3.6, 25, 7.2);
       ctx.fill();
       ctx.stroke();
 
-      // 검날
+      // 폼멜
+      ctx.fillStyle = stage >= 3 ? "#f59e0b" : stage === 2 ? "#60a5fa" : "#64748b";
+      ctx.beginPath();
+      ctx.arc(handleX - 4, 0, stage >= 3 ? 5.2 : 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 크로스가드: 단계별 형태 분리
+      ctx.strokeStyle = "#020617";
+      ctx.lineWidth = 1.6;
+      if (stage === 1) {
+        ctx.fillStyle = "#94a3b8";
+        ctx.beginPath();
+        ctx.moveTo(guardX - 3, -12);
+        ctx.lineTo(guardX + 5, -8);
+        ctx.lineTo(guardX + 5, 8);
+        ctx.lineTo(guardX - 3, 12);
+        ctx.lineTo(guardX - 7, 7);
+        ctx.lineTo(guardX - 7, -7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (stage === 2) {
+        ctx.fillStyle = "#60a5fa";
+        ctx.beginPath();
+        ctx.moveTo(guardX - 8, -17);
+        ctx.lineTo(guardX + 4, -12);
+        ctx.lineTo(guardX + 9, -4);
+        ctx.lineTo(guardX + 7, 4);
+        ctx.lineTo(guardX + 4, 12);
+        ctx.lineTo(guardX - 8, 17);
+        ctx.lineTo(guardX - 4, 7);
+        ctx.lineTo(guardX - 4, -7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#facc15";
+        ctx.beginPath();
+        ctx.moveTo(guardX - 12, -20);
+        ctx.lineTo(guardX + 1, -15);
+        ctx.lineTo(guardX + 11, -7);
+        ctx.lineTo(guardX + 8, 0);
+        ctx.lineTo(guardX + 11, 7);
+        ctx.lineTo(guardX + 1, 15);
+        ctx.lineTo(guardX - 12, 20);
+        ctx.lineTo(guardX - 6, 8);
+        ctx.lineTo(guardX - 6, -8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // 검날: 끝이 둥글거나 좁아지지 않도록 넓은 직선형 블레이드로 분리
       const grad = ctx.createLinearGradient(bladeStart, 0, bladeEnd, 0);
       grad.addColorStop(0, dark);
-      grad.addColorStop(0.46, main);
+      grad.addColorStop(0.45, main);
       grad.addColorStop(1, edge);
       ctx.shadowColor = main;
       ctx.shadowBlur = stage >= 3 ? 18 : 10;
       ctx.fillStyle = grad;
       ctx.strokeStyle = stage >= 3 ? "#fef3c7" : "#bfdbfe";
-      ctx.lineWidth = stage >= 3 ? 2.2 : 1.4;
+      ctx.lineWidth = stage >= 3 ? 2.3 : 1.5;
       ctx.globalAlpha = 0.98;
 
       if (stage === 1) {
+        const w = 5.2;
         ctx.beginPath();
         ctx.moveTo(bladeStart, -w);
         ctx.lineTo(bladeEnd, -w * 0.48);
-        ctx.lineTo(bladeEnd + tip, 0);
+        ctx.lineTo(bladeEnd + 8, 0);
         ctx.lineTo(bladeEnd, w * 0.48);
         ctx.lineTo(bladeStart, w);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
       } else if (stage === 2) {
+        // 견습기사: 푸른 롱소드. 양날이 거의 평행한 정통 검.
+        const w = 8.4;
         ctx.beginPath();
         ctx.moveTo(bladeStart, -w);
-        ctx.lineTo(bladeEnd - 14, -w * 0.72);
-        ctx.lineTo(bladeEnd + tip, 0);
-        ctx.lineTo(bladeEnd - 14, w * 0.72);
+        ctx.lineTo(bladeEnd - 8, -w);
+        ctx.lineTo(bladeEnd + 13, 0);
+        ctx.lineTo(bladeEnd - 8, w);
         ctx.lineTo(bladeStart, w);
         ctx.closePath();
         ctx.fill();
+        ctx.stroke();
+        ctx.globalAlpha = 0.50;
+        ctx.strokeStyle = "#e0f2fe";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bladeStart + 8, -w * 0.45);
+        ctx.lineTo(bladeEnd - 14, -w * 0.45);
+        ctx.moveTo(bladeStart + 8, w * 0.45);
+        ctx.lineTo(bladeEnd - 14, w * 0.45);
         ctx.stroke();
       } else {
+        // 기사: 넓은 금빛 브로드소드. 끝은 날카롭지만 몸통은 두껍게 유지.
+        const w = 11.5;
         ctx.beginPath();
         ctx.moveTo(bladeStart, -w);
-        ctx.lineTo(bladeEnd - 19, -w * 0.74);
-        ctx.lineTo(bladeEnd - 6, -w * 0.24);
-        ctx.lineTo(bladeEnd + tip, 0);
-        ctx.lineTo(bladeEnd - 6, w * 0.24);
-        ctx.lineTo(bladeEnd - 19, w * 0.74);
+        ctx.lineTo(bladeEnd - 14, -w);
+        ctx.lineTo(bladeEnd + 18, 0);
+        ctx.lineTo(bladeEnd - 14, w);
         ctx.lineTo(bladeStart, w);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        ctx.globalAlpha = 0.60;
+        ctx.fillStyle = "rgba(255,255,255,.48)";
+        ctx.beginPath();
+        ctx.moveTo(bladeStart + 10, -2.3);
+        ctx.lineTo(bladeEnd - 16, -2.3);
+        ctx.lineTo(bladeEnd - 8, 0);
+        ctx.lineTo(bladeEnd - 16, 2.3);
+        ctx.lineTo(bladeStart + 10, 2.3);
+        ctx.closePath();
+        ctx.fill();
       }
-
-      // 중앙 홈
-      ctx.globalAlpha = 0.58;
-      ctx.strokeStyle = stage >= 3 ? "#ffffff" : "#e0f2fe";
-      ctx.lineWidth = stage >= 3 ? 2.2 : 1.4;
-      ctx.beginPath();
-      ctx.moveTo(bladeStart + 10, 0);
-      ctx.lineTo(bladeEnd - 12, 0);
-      ctx.stroke();
       ctx.restore();
     }
 
@@ -2406,7 +2465,7 @@
         artillery_brik: { type: "time", max: 8.0, label: "포화명령" },
         vampire_luka: { type: "time", max: 8.0, label: "낮" },
         chain_nox: { type: "time", max: 4.4, label: "벽사슬" },
-        hero_leon: { type: "hero", max: 25.0, label: "성장" },
+        hero_leon: { type: "hero", max: 20.0, label: "성장" },
         thunder_jin: { type: "time", max: 30.0, label: "과전류" },
 
         steel_moro:  { type: "wall", max: 5, label: "방패 조건" },
@@ -2440,11 +2499,10 @@
           extraBarsHtml = `${slashBar}<div class="bar"><div class="bar-fill condition-fill" style="width:${beamRatio * 100}%"></div></div>`;
           text = `전설회복 ${remain <= 0 ? "준비됨" : remain.toFixed(1) + "초"} · ${slashText} · 검기 ${beam}/3`;
         } else {
-          const phase = battleTime % 25;
-          const next = 25 - phase;
-          current = clamp(phase / 25, 0, 1);
+          const growth = heroLeonStageProgress(battleTime);
+          current = clamp(growth.current / Math.max(1, growth.max), 0, 1);
           extraBarsHtml = slashBar;
-          text = `${heroLeonInfo(stage).name} · 성장 ${next.toFixed(1)}초 · ${slashText}`;
+          text = `${heroLeonInfo(stage).name} · 성장 ${growth.remain.toFixed(1)}초 · ${slashText}`;
         }
         if ((f.heroGuardCharges || 0) > 0) text += ` · 배리어 ${f.heroGuardCharges}`;
         if ((f.heroRegenTimer || 0) > 0) text += ` · 회복 ${Math.ceil(f.heroRegenTicksLeft || 0)}/10`;
@@ -3873,9 +3931,9 @@
         final = Math.max(1, Math.round(final * 0.30));
       }
 
-      // 시골소년: 맞고 도망치는 단계라 모든 일반 피해를 %로 줄인다.
+      // 시골소년: 맞고 도망치는 단계라 일반 피해를 50% 줄인다.
       if (!fixedDamage && target.baseId === "hero_leon" && (target.heroStage || 0) === 0) {
-        final = Math.max(1, Math.round(final * 0.65));
+        final = Math.max(1, Math.round(final * 0.50));
       }
 
       if (!fixedDamage && target.baseId === "hero_leon" && (target.heroStage || 0) >= 2 && !isSustainedDamage(reason)) {
@@ -5134,7 +5192,7 @@
                 power = Math.max(7, Math.round(f.attack * 1.04));
                 knock = 170;
                 reason = "기사검격";
-                applySlashBleed = true;
+                applySlashBleed = false;
               }
 
               f.swordTimer = 0;
