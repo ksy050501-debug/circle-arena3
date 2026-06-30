@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v156</title>
+  <title>원형 아레나 v157</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v156</h1>
+    <h1 id="mainTitle">원형 아레나 v157</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1064,8 +1064,8 @@
       },
       {
         id: "hero_leon", name: "시골소년 레온", mark: "勇", role: "전사", color: "#64748b",
-        hp: 118, attack: 8, speed: 2.55, range: 74,
-        skillName: "용사의 성장", condition: "20/23/26/29초 차등 성장", desc: "초반 방어형. 후반 검격 강화."
+        hp: 121, attack: 8, speed: 2.55, range: 74,
+        skillName: "용사의 성장", condition: "20/23/26/30초 차등 성장", desc: "초반 방어형. 후반 검격 강화."
       },
       {
         id: "dummy_unit", name: "훈련용 더미", mark: "木", role: "더미", color: "#9ca3af",
@@ -1298,6 +1298,7 @@
     }
 
     const patchNotes = [
+      "v157: 레온 체력 118에서 121로 증가하고, 최종 변신 시간을 29초에서 30초로 조정.",
       "v156: 레온 시골소년 피해경감 50%, 차등 성장시간, 기사 출혈 삭제, 배리어 증가, 검 디자인 재수정.",
       "v155: 시뮬레이션 모드에 자동 100전 상대전적 누적, 원클릭 복사, 초기화 버튼 추가.",
       "v154: 레온 검격 판정을 실제 검날 충돌로 변경하고, 전설검기를 검격 대체 투사체로 수정.",
@@ -2038,8 +2039,8 @@
       { name: "전설의 용사 레온", color: "#f59e0b", aura: "rgba(251,191,36,.74)", aura2: "rgba(37,99,235,.42)", particle: "#fbbf24", attack: 5, speed: 0.18, range: 134, hp: 18, heal: 10, slash: "#fde68a" }
     ];
 
-    const heroLeonStageDurations = [20, 23, 26, 29];
-    const heroLeonStageThresholds = [0, 20, 43, 69, 98];
+    const heroLeonStageDurations = [20, 23, 26, 30];
+    const heroLeonStageThresholds = [0, 20, 43, 69, 99];
 
     function heroLeonStage(time = battleTime) {
       if (time >= heroLeonStageThresholds[4]) return 4;
