@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v165</title>
+  <title>원형 아레나 v166</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v165</h1>
+    <h1 id="mainTitle">원형 아레나 v166</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1020,7 +1020,7 @@
       {
         id: "earth_taesan", name: "대지수호 태산", mark: "山", role: "수호자", color: "#92400e",
         hp: 208, attack: 10, speed: 1.95, range: 82,
-        skillName: "성벽진", condition: "7.8초마다 원형 성벽", desc: "성벽 안의 적을 추방하고, 진입하려는 적을 튕겨낸다."
+        skillName: "성벽진", condition: "7.8초마다 원형 성벽", desc: "제자리 고정 후 성벽을 펼쳐 적의 진입을 막는다."
       },
       {
         id: "wind_rio", name: "바람발 리오", mark: "風", role: "암살자", color: "#22c55e",
@@ -1303,6 +1303,7 @@
     }
 
     const patchNotes = [
+      "v166: 태산 성벽진 범위 추가 너프, 사용 중 태산 고정, 자힐 삭제, 벽돌 외곽선 이펙트 강화.",
       "v165: 태산 성벽진 범위와 피해를 낮추고, 장판딜 대신 추방·성벽충돌 구조로 변경.",
       "v164: 해일방벽 마루 삭제. 신규 수호자 대지수호 태산 추가. 받는 피해 감소와 성벽진 전장 제어 구현.",
       "v163: 마루 해일 이펙트 초반 음수 반지름 오류로 게임이 멈추던 문제 수정.",
@@ -2911,6 +2912,14 @@
         z.life > 0 &&
         Math.hypot(f.x - z.x, f.y - z.y) <= z.r + f.r
       );
+    }
+
+    function hasOwnEarthBulwark(f) {
+      return !!(f && f.alive && zones.some(z =>
+        z.kind === "earthBulwark" &&
+        z.sourceId === f.id &&
+        z.life > 0
+      ));
     }
 
     function applyEarthGuardianDamageMode(target, final, fixedDamage, reason) {
@@ -4781,6 +4790,7 @@
 
     function currentSpeed(f) {
       if ((f.joltStop || 0) > 0) return 0;
+      if (f.baseId === "earth_taesan" && hasOwnEarthBulwark(f)) return 0;
       if (f.baseId === "wind_rio") {
         ensureRioPermanentVelocity(f);
       }
@@ -4863,7 +4873,7 @@
             sourceId: f.id,
             x: f.x,
             y: f.y,
-            r: 148,
+            r: 128,
             life: 4.1,
             maxLife: 4.1,
             tick: 0,
@@ -4874,7 +4884,7 @@
             hitCd: {},
             expelledIds: new Set()
           });
-          spawnBlast(f.x, f.y, 92, "#a16207");
+          spawnBlast(f.x, f.y, 74, "#a16207");
           spawnParticles(f.x, f.y, "#facc15", 28);
           spawnFloatingText(f.x, f.y - f.r - 44, "성벽진", "#fde68a");
           f.skillClock = 0;
@@ -5675,6 +5685,14 @@
         return;
       }
 
+      if (f.baseId === "earth_taesan" && hasOwnEarthBulwark(f)) {
+        f.vx = 0;
+        f.vy = 0;
+        if (Math.random() < dt * 18) spawnParticles(f.x + rand(-f.r, f.r), f.y + rand(-f.r, f.r), "#a16207", 1);
+        checkSkill(f, dt);
+        return;
+      }
+
       if (f.baseId === "vampire_luka" && updateVampireLuka(f, dt)) {
         return;
       }
@@ -6109,10 +6127,6 @@
           z.x = source.x;
           z.y = source.y;
         }
-        if (z.kind === "earthBulwark") {
-          z.x = source.x;
-          z.y = source.y;
-        }
         if (z.kind === "slash" && z.followSource) {
           z.x = source.x;
           z.y = source.y;
@@ -6346,14 +6360,13 @@
 
           if (z.tick <= 0) {
             z.tick = 0.55;
-            heal(source, 1.2);
           }
 
           enemiesOf(source).forEach(e => {
             const dx = e.x - z.x;
             const dy = e.y - z.y;
             const d = Math.max(1, Math.hypot(dx, dy));
-            const wallR = z.r || 148;
+            const wallR = z.r || 128;
             const insideLimit = wallR + e.r;
             const now = battleTime;
 
@@ -6405,6 +6418,67 @@
                 spawnParticles(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr, k % 2 ? "#facc15" : "#a16207", 1);
               }
             }
+          }
+        } else if (z.kind === "earthBulwark") {
+          const alpha = clamp(z.life / Math.max(0.1, z.maxLife || 4.1), 0, 1);
+          const pulse2 = 0.5 + 0.5 * Math.sin(battleTime * 7 + (z.pulseIndex || 0));
+          const wallR = z.r || 128;
+
+          ctx.globalAlpha = 0.07 + 0.06 * alpha;
+          ctx.fillStyle = "#78350f";
+          ctx.beginPath();
+          ctx.arc(z.x, z.y, wallR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 외곽 굵은 성벽선
+          ctx.globalAlpha = 0.96 * alpha;
+          ctx.strokeStyle = "#facc15";
+          ctx.lineWidth = 14;
+          ctx.beginPath();
+          ctx.arc(z.x, z.y, wallR, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.globalAlpha = 0.92 * alpha;
+          ctx.strokeStyle = "#78350f";
+          ctx.lineWidth = 9;
+          ctx.beginPath();
+          ctx.arc(z.x, z.y, wallR, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // 벽돌 느낌: 외곽을 작은 벽돌 블록으로 둘러 표시
+          const bricks = 36;
+          for (let i = 0; i < bricks; i++) {
+            const a = i * Math.PI * 2 / bricks;
+            const bx = z.x + Math.cos(a) * wallR;
+            const by = z.y + Math.sin(a) * wallR;
+            ctx.save();
+            ctx.translate(bx, by);
+            ctx.rotate(a + Math.PI / 2);
+            ctx.globalAlpha = (0.78 + 0.18 * pulse2) * alpha;
+            ctx.fillStyle = i % 2 ? "#92400e" : "#b45309";
+            ctx.strokeStyle = "#fde68a";
+            ctx.lineWidth = 1.4;
+            roundRect(ctx, -7.5, -12, 15, 24, 3, true, true);
+            ctx.restore();
+          }
+
+          // 안쪽 금 간 대지선
+          ctx.globalAlpha = 0.28 * alpha;
+          ctx.strokeStyle = "#fef3c7";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([12, 9]);
+          ctx.beginPath();
+          ctx.arc(z.x, z.y, wallR * 0.70, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          for (let i = 0; i < 8; i++) {
+            const a = i * Math.PI * 2 / 8 + Math.sin(battleTime + i) * 0.12;
+            ctx.globalAlpha = 0.24 * alpha;
+            ctx.beginPath();
+            ctx.moveTo(z.x + Math.cos(a) * 22, z.y + Math.sin(a) * 22);
+            ctx.lineTo(z.x + Math.cos(a) * wallR * 0.62, z.y + Math.sin(a) * wallR * 0.62);
+            ctx.stroke();
           }
         } else if (z.kind === "wavePulse") {
           const progress = clamp(1 - z.life / Math.max(0.1, z.maxLife || 2.25), 0, 1);
