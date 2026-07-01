@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v166</title>
+  <title>원형 아레나 v167</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v166</h1>
+    <h1 id="mainTitle">원형 아레나 v167</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1019,8 +1019,8 @@
       },
       {
         id: "earth_taesan", name: "대지수호 태산", mark: "山", role: "수호자", color: "#92400e",
-        hp: 208, attack: 10, speed: 1.95, range: 82,
-        skillName: "성벽진", condition: "7.8초마다 원형 성벽", desc: "제자리 고정 후 성벽을 펼쳐 적의 진입을 막는다."
+        hp: 260, attack: 12, speed: 0, range: 0,
+        skillName: "대지격노", condition: "60초마다 전체기 / 받은 피해로 3단계", desc: "움직이지 않고 피해를 버티다 맵 전체를 뒤흔든다."
       },
       {
         id: "wind_rio", name: "바람발 리오", mark: "風", role: "암살자", color: "#22c55e",
@@ -1303,6 +1303,7 @@
     }
 
     const patchNotes = [
+      "v167: 태산을 이동불가 수호자로 리워크. 성벽진 삭제, 투사체 취약, 60초 전장 전체기 3단계 추가.",
       "v166: 태산 성벽진 범위 추가 너프, 사용 중 태산 고정, 자힐 삭제, 벽돌 외곽선 이펙트 강화.",
       "v165: 태산 성벽진 범위와 피해를 낮추고, 장판딜 대신 추방·성벽충돌 구조로 변경.",
       "v164: 해일방벽 마루 삭제. 신규 수호자 대지수호 태산 추가. 받는 피해 감소와 성벽진 전장 제어 구현.",
@@ -1425,9 +1426,9 @@
           tip: "방패 중 반격."
         },
         earth_taesan: {
-          damage: "추방 8 / 성벽충돌 3",
-          tick: "진입 차단·튕겨냄",
-          tip: "성벽진 안의 적을 밖으로 쫓아내고, 들어오려는 적을 막는다."
+          damage: "지진 / 대지진 / 화산폭발",
+          tick: "투사체 피해 증가",
+          tip: "이동하지 않는다. 60초마다 받은 피해량에 따라 전체기를 쓴다."
         },
         wind_rio: {
           damage: "질풍돌파 10~15 / 풍압충돌 2~5",
@@ -1827,6 +1828,7 @@
         waveSavedVx: 0,
         waveSavedVy: 0,
         earthDustCd: 0,
+        taesanStoredDamage: 0,
         poisonTicks: [],
         burningTicks: [],
         freeze: 0,
@@ -2516,7 +2518,7 @@
         hero_leon: { type: "hero", max: 20.0, label: "성장" },
         thunder_jin: { type: "time", max: 30.0, label: "과전류" },
 
-        earth_taesan: { type: "time", max: 7.8, label: "성벽진" },
+        earth_taesan: { type: "time", max: 60.0, label: "대지격노" },
 
         steel_moro:  { type: "wall", max: 5, label: "방패 조건" },
         wind_rio:    { type: "wall", max: 3, label: "질풍돌파" },
@@ -2573,9 +2575,9 @@
           text += ` · 정화 ${lightRemain <= 0 ? "준비됨" : lightRemain.toFixed(1) + "초"}${isInMinaGarden(f) ? " · 성역 안" : ""}`;
         }
         if (f.baseId === "earth_taesan") {
-          const active = zones.some(z => z.kind === "earthBulwark" && z.sourceId === f.id && z.life > 0);
-          const low = f.hp / Math.max(1, f.maxHp) <= 0.45;
-          text += active ? " · 성벽진 전개" : ` · 피해감소 ${low ? "강화" : "기본"}`;
+          const stored = Math.round(f.taesanStoredDamage || 0);
+          const quake = taesanQuakeInfo(stored);
+          text += ` · 고정 · 축적 ${stored} · 다음 ${quake.name}`;
         }
         if (f.baseId === "rage_baro") {
           const missing = baroMissingRatio(f);
@@ -2895,7 +2897,7 @@
     }
 
     function isCollisionDamage(reason) {
-      return ["질풍돌파", "풍압충돌", "분신충돌", "회전격", "불사회전격", "피의난타", "철벽후려치기", "철벽충돌", "용사검격", "초보검사검격", "견습기사검격", "기사검격", "전설원공격", "전설검기", "용사절반참", "성벽진", "성벽추방", "성벽충돌"].includes(reason);
+      return ["질풍돌파", "풍압충돌", "분신충돌", "회전격", "불사회전격", "피의난타", "철벽후려치기", "철벽충돌", "용사검격", "초보검사검격", "견습기사검격", "기사검격", "전설원공격", "전설검기", "용사절반참"].includes(reason);
     }
 
     function isFixedDamage(reason) {
@@ -2904,37 +2906,29 @@
       return ["철벽반사", "햇빛"].includes(reason);
     }
 
-    function isInsideEarthBulwark(f) {
-      if (!f || !f.alive) return false;
-      return zones.some(z =>
-        z.kind === "earthBulwark" &&
-        z.sourceId === f.id &&
-        z.life > 0 &&
-        Math.hypot(f.x - z.x, f.y - z.y) <= z.r + f.r
-      );
+    function isProjectileDamageReason(reason) {
+      return [
+        "매직미사일", "파이어볼", "관통저격", "전류탄", "독안개", "독가스",
+        "흡혈구슬", "달빛표식", "화염마법", "전설검기", "황금난사"
+      ].includes(reason);
     }
 
-    function hasOwnEarthBulwark(f) {
-      return !!(f && f.alive && zones.some(z =>
-        z.kind === "earthBulwark" &&
-        z.sourceId === f.id &&
-        z.life > 0
-      ));
+    function taesanQuakeInfo(stored = 0) {
+      const s = Math.max(0, Math.round(stored || 0));
+      if (s >= 190) return { level: 3, name: "화산폭발", power: clamp(Math.round(28 + s * 0.075), 32, 54), color: "#fb923c", slow: 1.15, burn: true };
+      if (s >= 95) return { level: 2, name: "대지진", power: clamp(Math.round(18 + s * 0.060), 22, 36), color: "#facc15", slow: 0.85, burn: false };
+      return { level: 1, name: "지진", power: clamp(Math.round(10 + s * 0.045), 10, 18), color: "#a16207", slow: 0.55, burn: false };
     }
 
-    function applyEarthGuardianDamageMode(target, final, fixedDamage, reason) {
+    function applyTaesanDamageMode(target, final, fixedDamage, reason) {
       if (!target || target.baseId !== "earth_taesan" || fixedDamage) return final;
-      const lowHp = target.hp / Math.max(1, target.maxHp) <= 0.45;
-      const inWall = isInsideEarthBulwark(target);
-      const ratio = inWall ? 0.52 : lowHp ? 0.62 : 0.72;
-      const reduced = Math.max(1, Math.round(final * ratio));
-
-      if (!isSustainedDamage(reason) && Math.random() < 0.18) {
-        spawnFloatingText(target.x, target.y - target.r - 34, inWall ? "성벽방어" : "대지방어", "#facc15");
+      if (isProjectileDamageReason(reason)) {
+        const boosted = Math.max(1, Math.round(final * 1.45));
+        if (Math.random() < 0.28) spawnFloatingText(target.x, target.y - target.r - 34, "투사체 취약", "#fecaca");
+        return boosted;
       }
-      return reduced;
+      return final;
     }
-
     function isZenWeakeningDamage(reason) {
       return !isFixedDamage(reason) && !isSustainedDamage(reason);
     }
@@ -4026,7 +4020,7 @@
         final = Math.max(1, final - 3);
       }
 
-      final = applyEarthGuardianDamageMode(target, final, fixedDamage, reason);
+      final = applyTaesanDamageMode(target, final, fixedDamage, reason);
 
             // 젠의 독에 감염된 상대가 젠에게 주는 직접 피해는 1 감소한다.
       // 고정피해/지속피해/장판형 피해는 제외한다.
@@ -4143,6 +4137,7 @@
       target.hp -= final;
       const actualDamage = Math.min(final, hpBeforeDamage);
       target.damageTaken = (target.damageTaken || 0) + actualDamage;
+      if (target.baseId === "earth_taesan") target.taesanStoredDamage = Math.min(420, (target.taesanStoredDamage || 0) + actualDamage);
       if (source && source.alive && source !== target) source.damageDealt = (source.damageDealt || 0) + actualDamage;
       heroLeonOnDamaged(target, source, reason);
 
@@ -4208,7 +4203,7 @@
         final = Math.max(1, Math.round(final * 0.65));
       }
 
-      final = applyEarthGuardianDamageMode(target, final, fixedDamage, reason);
+      final = applyTaesanDamageMode(target, final, fixedDamage, reason);
 
             if (trySiaCloneEscape(target, source, final, reason)) {
         target.hitsTaken += 1;
@@ -4224,6 +4219,7 @@
       target.hp -= final;
       const actualBodyDamage = Math.min(final, hpBeforeBodyDamage);
       target.damageTaken = (target.damageTaken || 0) + actualBodyDamage;
+      if (target.baseId === "earth_taesan") target.taesanStoredDamage = Math.min(420, (target.taesanStoredDamage || 0) + actualBodyDamage);
       if (source && source.alive && source !== target) source.damageDealt = (source.damageDealt || 0) + actualBodyDamage;
       heroLeonOnDamaged(target, source, reason);
       target.hitsTaken += 1;
@@ -4790,7 +4786,7 @@
 
     function currentSpeed(f) {
       if ((f.joltStop || 0) > 0) return 0;
-      if (f.baseId === "earth_taesan" && hasOwnEarthBulwark(f)) return 0;
+      if (f.baseId === "earth_taesan") return 0;
       if (f.baseId === "wind_rio") {
         ensureRioPermanentVelocity(f);
       }
@@ -4867,30 +4863,34 @@
         }
 
         case "earth_taesan": {
-          beginCastPause(f, 0.38);
-          zones.push({
-            kind: "earthBulwark",
-            sourceId: f.id,
-            x: f.x,
-            y: f.y,
-            r: 128,
-            life: 4.1,
-            maxLife: 4.1,
-            tick: 0,
-            pulse: 0.18,
-            color: "#a16207",
-            power: 8,
-            wallPower: 3,
-            hitCd: {},
-            expelledIds: new Set()
+          const stored = Math.round(f.taesanStoredDamage || 0);
+          const quake = taesanQuakeInfo(stored);
+          const center = arenaCenter();
+
+          enemiesOf(f).forEach(e => {
+            damage(e, quake.power, f, quake.name);
+            applyFreeze(e, quake.slow);
+            const dx = e.x - f.x;
+            const dy = e.y - f.y;
+            const d = Math.max(1, Math.hypot(dx, dy));
+            if (quake.level >= 2) {
+              e.vx += dx / d * (quake.level === 3 ? 360 : 240);
+              e.vy += dy / d * (quake.level === 3 ? 360 : 240);
+              capVelocity(e, e.baseSpeed * 44 * (quake.level === 3 ? 1.45 : 1.18));
+            }
+            if (quake.burn) applyBurn(e, f, 4, 3.2, 0.55, 6, "volcano");
+            spawnHitFlash(e.x, e.y, quake.color, quake.level === 3 ? 72 : 52);
           });
-          spawnBlast(f.x, f.y, 74, "#a16207");
-          spawnParticles(f.x, f.y, "#facc15", 28);
-          spawnFloatingText(f.x, f.y - f.r - 44, "성벽진", "#fde68a");
+
+          zones.push({ kind: "taesanQuake", sourceId: f.id, x: center.x, y: center.y, r: arena.size * 0.72, life: 1.45, maxLife: 1.45, tick: 0, color: quake.color, level: quake.level, name: quake.name, stored });
+          spawnBlast(f.x, f.y, quake.level === 3 ? 170 : quake.level === 2 ? 135 : 105, quake.color);
+          spawnParticles(f.x, f.y, quake.color, quake.level === 3 ? 60 : 38);
+          spawnFloatingText(f.x, f.y - f.r - 48, `${quake.name} ${stored}`, quake.color);
+          f.taesanStoredDamage = 0;
           f.skillClock = 0;
-          f.skillCooldown = 0.55;
-          playSound("shield", 1.05);
-          log(`${sourceName} 성벽진 전개`, "스킬");
+          f.skillCooldown = 0.8;
+          playSound(quake.level === 3 ? "fireball" : "shield", 1.18);
+          log(`${sourceName} ${quake.name} 발동 · 축적 ${stored}`, "스킬");
           break;
         }
 
@@ -5454,7 +5454,7 @@
           if (f.shieldHp <= 0 && f.wallBouncesSkill >= 5) useSkill(f);
           break;
         case "earth_taesan":
-          if (f.skillClock >= 7.8) useSkill(f);
+          if (f.skillClock >= 60.0) useSkill(f);
           break;
         case "blue_noa":
           if (f.skillClock >= 6) useSkill(f);
@@ -5559,6 +5559,13 @@
       f.earthDustCd = Math.max(0, (f.earthDustCd || 0) - dt);
       f.swordTimer = Math.max(0, (f.swordTimer || 0) - dt);
       if (f.attackBoost !== 9999) f.attackBoost = Math.max(0, f.attackBoost - dt);
+
+      if (f.baseId === "earth_taesan") {
+        f.vx = 0;
+        f.vy = 0;
+        checkSkill(f, dt);
+        return;
+      }
 
       if (f.baseId === "blink_dodo" && updateDodoVoid(f, dt)) {
         return;
@@ -5685,14 +5692,6 @@
         return;
       }
 
-      if (f.baseId === "earth_taesan" && hasOwnEarthBulwark(f)) {
-        f.vx = 0;
-        f.vy = 0;
-        if (Math.random() < dt * 18) spawnParticles(f.x + rand(-f.r, f.r), f.y + rand(-f.r, f.r), "#a16207", 1);
-        checkSkill(f, dt);
-        return;
-      }
-
       if (f.baseId === "vampire_luka" && updateVampireLuka(f, dt)) {
         return;
       }
@@ -5812,6 +5811,23 @@
             const nx = dx / d;
             const ny = dy / d;
             const overlap = minD - d;
+
+            if (a.baseId === "earth_taesan" || b.baseId === "earth_taesan") {
+              const taesan = a.baseId === "earth_taesan" ? a : b;
+              const other = taesan === a ? b : a;
+              const sign = taesan === a ? 1 : -1;
+              other.x += nx * overlap * sign;
+              other.y += ny * overlap * sign;
+              taesan.vx = 0;
+              taesan.vy = 0;
+
+              const ovn = other.vx * nx + other.vy * ny;
+              if ((taesan === a && ovn < 0) || (taesan === b && ovn > 0)) {
+                other.vx -= 2 * ovn * nx;
+                other.vy -= 2 * ovn * ny;
+              }
+              continue;
+            }
 
             const aCasting = isCasting(a);
             const bCasting = isCasting(b);
