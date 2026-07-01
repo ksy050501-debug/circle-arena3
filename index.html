@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v167</title>
+  <title>원형 아레나 v168</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v167</h1>
+    <h1 id="mainTitle">원형 아레나 v168</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1019,8 +1019,8 @@
       },
       {
         id: "earth_taesan", name: "대지수호 태산", mark: "山", role: "수호자", color: "#92400e",
-        hp: 260, attack: 12, speed: 0, range: 0,
-        skillName: "대지격노", condition: "60초마다 전체기 / 받은 피해로 3단계", desc: "움직이지 않고 피해를 버티다 맵 전체를 뒤흔든다."
+        hp: 260, attack: 12, speed: 0.25, range: 0,
+        skillName: "대지격노", condition: "60초 소용돌이 이동 후 전체기", desc: "외곽에서 중앙으로 천천히 감겨 들어가며 피해를 축적한다."
       },
       {
         id: "wind_rio", name: "바람발 리오", mark: "風", role: "암살자", color: "#22c55e",
@@ -1303,6 +1303,7 @@
     }
 
     const patchNotes = [
+      "v168: 태산을 초저속 소용돌이 이동형으로 변경. 60초 동안 외곽에서 중앙으로 감겨 들어간 뒤 전체기 사용.",
       "v167: 태산을 이동불가 수호자로 리워크. 성벽진 삭제, 투사체 취약, 60초 전장 전체기 3단계 추가.",
       "v166: 태산 성벽진 범위 추가 너프, 사용 중 태산 고정, 자힐 삭제, 벽돌 외곽선 이펙트 강화.",
       "v165: 태산 성벽진 범위와 피해를 낮추고, 장판딜 대신 추방·성벽충돌 구조로 변경.",
@@ -1428,7 +1429,7 @@
         earth_taesan: {
           damage: "지진 / 대지진 / 화산폭발",
           tick: "투사체 피해 증가",
-          tip: "이동하지 않는다. 60초마다 받은 피해량에 따라 전체기를 쓴다."
+          tip: "매우 느린 고정 소용돌이 경로로 움직인다. 60초 뒤 중앙에서 전체기를 쓴다."
         },
         wind_rio: {
           damage: "질풍돌파 10~15 / 풍압충돌 2~5",
@@ -1829,6 +1830,8 @@
         waveSavedVy: 0,
         earthDustCd: 0,
         taesanStoredDamage: 0,
+        taesanSpiralAngleBase: null,
+        taesanSpiralCycle: 0,
         poisonTicks: [],
         burningTicks: [],
         freeze: 0,
@@ -2577,7 +2580,8 @@
         if (f.baseId === "earth_taesan") {
           const stored = Math.round(f.taesanStoredDamage || 0);
           const quake = taesanQuakeInfo(stored);
-          text += ` · 고정 · 축적 ${stored} · 다음 ${quake.name}`;
+          const spiralPct = Math.round(clamp((f.skillClock || 0) / 60, 0, 1) * 100);
+          text += ` · 소용돌이 ${spiralPct}% · 축적 ${stored} · 다음 ${quake.name}`;
         }
         if (f.baseId === "rage_baro") {
           const missing = baroMissingRatio(f);
@@ -2918,6 +2922,48 @@
       if (s >= 190) return { level: 3, name: "화산폭발", power: clamp(Math.round(28 + s * 0.075), 32, 54), color: "#fb923c", slow: 1.15, burn: true };
       if (s >= 95) return { level: 2, name: "대지진", power: clamp(Math.round(18 + s * 0.060), 22, 36), color: "#facc15", slow: 0.85, burn: false };
       return { level: 1, name: "지진", power: clamp(Math.round(10 + s * 0.045), 10, 18), color: "#a16207", slow: 0.55, burn: false };
+    }
+
+    function taesanSpiralTarget(f) {
+      const c = arenaCenter();
+      if (f.taesanSpiralAngleBase === null || f.taesanSpiralAngleBase === undefined) {
+        f.taesanSpiralAngleBase = rand(0, Math.PI * 2);
+      }
+      const progress = clamp((f.skillClock || 0) / 60, 0, 1);
+      const outerR = Math.max(90, arena.size * 0.42 - f.r);
+      const radius = outerR * (1 - progress);
+      const turns = 1.35;
+      const angle = f.taesanSpiralAngleBase + progress * Math.PI * 2 * turns;
+      return {
+        x: clamp(c.x + Math.cos(angle) * radius, arena.x + f.r, arena.x2 - f.r),
+        y: clamp(c.y + Math.sin(angle) * radius, arena.y + f.r, arena.y2 - f.r)
+      };
+    }
+
+    function updateTaesanSpiralMovement(f, dt, resetOuter = false) {
+      if (!f || !f.alive || f.baseId !== "earth_taesan") return;
+      if (resetOuter) {
+        f.taesanSpiralCycle = (f.taesanSpiralCycle || 0) + 1;
+        f.taesanSpiralAngleBase = (f.taesanSpiralAngleBase === null || f.taesanSpiralAngleBase === undefined)
+          ? rand(0, Math.PI * 2)
+          : f.taesanSpiralAngleBase + Math.PI * 0.72;
+      }
+      const prevX = f.x;
+      const prevY = f.y;
+      const target = taesanSpiralTarget(f);
+      f.x = target.x;
+      f.y = target.y;
+      if (dt > 0) {
+        f.vx = (f.x - prevX) / dt;
+        f.vy = (f.y - prevY) / dt;
+      } else {
+        f.vx = 0;
+        f.vy = 0;
+      }
+      if ((f.earthDustCd || 0) <= 0 && Math.random() < 0.65) {
+        f.earthDustCd = 0.32;
+        spawnParticles(f.x, f.y, "#a16207", 1);
+      }
     }
 
     function applyTaesanDamageMode(target, final, fixedDamage, reason) {
@@ -4786,7 +4832,7 @@
 
     function currentSpeed(f) {
       if ((f.joltStop || 0) > 0) return 0;
-      if (f.baseId === "earth_taesan") return 0;
+      if (f.baseId === "earth_taesan") return f.baseSpeed * 44;
       if (f.baseId === "wind_rio") {
         ensureRioPermanentVelocity(f);
       }
@@ -4889,6 +4935,7 @@
           f.taesanStoredDamage = 0;
           f.skillClock = 0;
           f.skillCooldown = 0.8;
+          updateTaesanSpiralMovement(f, 0, true);
           playSound(quake.level === 3 ? "fireball" : "shield", 1.18);
           log(`${sourceName} ${quake.name} 발동 · 축적 ${stored}`, "스킬");
           break;
@@ -5561,8 +5608,7 @@
       if (f.attackBoost !== 9999) f.attackBoost = Math.max(0, f.attackBoost - dt);
 
       if (f.baseId === "earth_taesan") {
-        f.vx = 0;
-        f.vy = 0;
+        updateTaesanSpiralMovement(f, dt);
         checkSkill(f, dt);
         return;
       }
@@ -8208,17 +8254,32 @@
         drawHeroLeonAura(f);
       }
       if (f.baseId === "earth_taesan") {
-        const active = zones.some(z => z.kind === "earthBulwark" && z.sourceId === f.id && z.life > 0);
-        const low = f.hp / Math.max(1, f.maxHp) <= 0.45;
-        if (active) {
-          drawRing(f.x, f.y, f.r + 15 + Math.sin(battleTime * 12) * 3, "rgba(250,204,21,.92)", 5);
-          drawRing(f.x, f.y, f.r + 30, "rgba(161,98,7,.50)", 3);
-        } else if (low) {
-          drawRing(f.x, f.y, f.r + 12, "rgba(251,191,36,.78)", 4);
-          drawRing(f.x, f.y, f.r + 22, "rgba(120,53,15,.44)", 2);
-        } else {
-          drawRing(f.x, f.y, f.r + 10, "rgba(161,98,7,.64)", 3);
+        const storedRatio = clamp((f.taesanStoredDamage || 0) / 420, 0, 1);
+        const c = arenaCenter();
+
+        ctx.save();
+        ctx.globalAlpha = 0.12 + storedRatio * 0.10;
+        ctx.strokeStyle = "#a16207";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 10]);
+        ctx.beginPath();
+        const base = f.taesanSpiralAngleBase === null || f.taesanSpiralAngleBase === undefined ? 0 : f.taesanSpiralAngleBase;
+        const outerR = Math.max(90, arena.size * 0.42 - f.r);
+        for (let i = 0; i <= 80; i++) {
+          const t = i / 80;
+          const rr = outerR * (1 - t);
+          const a = base + t * Math.PI * 2 * 1.35;
+          const x = c.x + Math.cos(a) * rr;
+          const y = c.y + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
         }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        drawRing(f.x, f.y, f.r + 10 + storedRatio * 12, "rgba(161,98,7,.70)", 3 + storedRatio * 3);
+        drawRing(f.x, f.y, f.r + 24 + storedRatio * 18, "rgba(250,204,21,.26)", 2);
       }
       if (f.shieldHp > 0) {
         drawRing(f.x, f.y, f.r + 8, "rgba(203,213,225,.95)", 5);
