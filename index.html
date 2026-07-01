@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v161</title>
+  <title>원형 아레나 v165</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v161</h1>
+    <h1 id="mainTitle">원형 아레나 v165</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1018,9 +1018,9 @@
         skillName: "영구 철벽반사", condition: "방패 없을 때 벽 충돌 5회", desc: "방패, 반격, 성장, 후려치기."
       },
       {
-        id: "tidal_maru", name: "해일방벽 마루", mark: "海", role: "수호자", color: "#0284c7",
-        hp: 190, attack: 9, speed: 2.15, range: 84,
-        skillName: "해일반동", condition: "16초 피해감소 축적 후 정지 방출", desc: "오래 버티며 축적한 피해를 해일로 되돌린다."
+        id: "earth_taesan", name: "대지수호 태산", mark: "山", role: "수호자", color: "#92400e",
+        hp: 208, attack: 10, speed: 1.95, range: 82,
+        skillName: "성벽진", condition: "7.8초마다 원형 성벽", desc: "성벽 안의 적을 추방하고, 진입하려는 적을 튕겨낸다."
       },
       {
         id: "wind_rio", name: "바람발 리오", mark: "風", role: "암살자", color: "#22c55e",
@@ -1303,6 +1303,10 @@
     }
 
     const patchNotes = [
+      "v165: 태산 성벽진 범위와 피해를 낮추고, 장판딜 대신 추방·성벽충돌 구조로 변경.",
+      "v164: 해일방벽 마루 삭제. 신규 수호자 대지수호 태산 추가. 받는 피해 감소와 성벽진 전장 제어 구현.",
+      "v163: 마루 해일 이펙트 초반 음수 반지름 오류로 게임이 멈추던 문제 수정.",
+      "v162: 마루 피해감소/축적 보강, 축적 80 이상 방출 조건, 약점 연장, 범위와 이동형 해일 판정 강화.",
       "v161: 신규 수호자를 해일방벽 마루로 리워크. 16초 피해감소 축적, 정지 방출, 물보라 해일 이펙트 적용.",
       "v160: 신규 수호자 해일방벽 마루 추가. 피해감소, 피해축적, 원형 해일 반사, 약점 구간을 구현.",
       "v159: 시뮬레이션 모드에 선택 캐릭터 전체 100전, 더미 제외, 도감 정렬 개선 추가.",
@@ -1419,10 +1423,10 @@
           tick: "없음",
           tip: "방패 중 반격."
         },
-        tidal_maru: {
-          damage: "해일반동 14~60",
-          tick: "해일 밀어냄·슬로우",
-          tip: "16초 동안 피해를 줄이고 축적한 뒤 멈춰서 해일을 방출한다."
+        earth_taesan: {
+          damage: "추방 8 / 성벽충돌 3",
+          tick: "진입 차단·튕겨냄",
+          tip: "성벽진 안의 적을 밖으로 쫓아내고, 들어오려는 적을 막는다."
         },
         wind_rio: {
           damage: "질풍돌파 10~15 / 풍압충돌 2~5",
@@ -1575,7 +1579,7 @@
 
     const characterDisplayOrder = [
       "dummy_unit",
-      "flame_tori", "steel_moro", "tidal_maru", "wind_rio", "healer_mina", "poison_zen",
+      "flame_tori", "steel_moro", "earth_taesan", "wind_rio", "healer_mina", "poison_zen",
       "blink_dodo", "purple_sia", "rage_baro", "artillery_brik",
       "vampire_luka", "chain_nox", "thunder_jin", "hero_leon"
     ];
@@ -1821,6 +1825,7 @@
         waveStoreTextCd: 0,
         waveSavedVx: 0,
         waveSavedVy: 0,
+        earthDustCd: 0,
         poisonTicks: [],
         burningTicks: [],
         freeze: 0,
@@ -2510,7 +2515,7 @@
         hero_leon: { type: "hero", max: 20.0, label: "성장" },
         thunder_jin: { type: "time", max: 30.0, label: "과전류" },
 
-        tidal_maru: { type: "time", max: 16.0, label: "해일반동" },
+        earth_taesan: { type: "time", max: 7.8, label: "성벽진" },
 
         steel_moro:  { type: "wall", max: 5, label: "방패 조건" },
         wind_rio:    { type: "wall", max: 3, label: "질풍돌파" },
@@ -2566,14 +2571,10 @@
           const lightRemain = Math.max(0, 3.8 - (f.minaLightClock || 0));
           text += ` · 정화 ${lightRemain <= 0 ? "준비됨" : lightRemain.toFixed(1) + "초"}${isInMinaGarden(f) ? " · 성역 안" : ""}`;
         }
-        if (f.baseId === "tidal_maru") {
-          const weak = Math.max(0, f.waveWeakTimer || 0);
-          const cast = Math.max(0, f.waveCastTimer || 0);
-          text += cast > 0
-            ? ` · 해일 방출 ${cast.toFixed(1)}초`
-            : weak > 0
-              ? ` · 약점 ${weak.toFixed(1)}초 · 축적 ${Math.round(f.waveStored || 0)}`
-              : ` · 피해감소 · 축적 ${Math.round(f.waveStored || 0)}`;
+        if (f.baseId === "earth_taesan") {
+          const active = zones.some(z => z.kind === "earthBulwark" && z.sourceId === f.id && z.life > 0);
+          const low = f.hp / Math.max(1, f.maxHp) <= 0.45;
+          text += active ? " · 성벽진 전개" : ` · 피해감소 ${low ? "강화" : "기본"}`;
         }
         if (f.baseId === "rage_baro") {
           const missing = baroMissingRatio(f);
@@ -2893,7 +2894,7 @@
     }
 
     function isCollisionDamage(reason) {
-      return ["질풍돌파", "풍압충돌", "분신충돌", "회전격", "불사회전격", "피의난타", "철벽후려치기", "철벽충돌", "용사검격", "초보검사검격", "견습기사검격", "기사검격", "전설원공격", "전설검기", "용사절반참", "해일반동"].includes(reason);
+      return ["질풍돌파", "풍압충돌", "분신충돌", "회전격", "불사회전격", "피의난타", "철벽후려치기", "철벽충돌", "용사검격", "초보검사검격", "견습기사검격", "기사검격", "전설원공격", "전설검기", "용사절반참", "성벽진", "성벽추방", "성벽충돌"].includes(reason);
     }
 
     function isFixedDamage(reason) {
@@ -2902,33 +2903,27 @@
       return ["철벽반사", "햇빛"].includes(reason);
     }
 
-    function applyWaveGuardianDamageMode(target, final, fixedDamage, reason) {
-      if (!target || target.baseId !== "tidal_maru" || fixedDamage) return final;
+    function isInsideEarthBulwark(f) {
+      if (!f || !f.alive) return false;
+      return zones.some(z =>
+        z.kind === "earthBulwark" &&
+        z.sourceId === f.id &&
+        z.life > 0 &&
+        Math.hypot(f.x - z.x, f.y - z.y) <= z.r + f.r
+      );
+    }
 
-      if ((target.waveWeakTimer || 0) > 0) {
-        return Math.max(1, Math.round(final * 1.25));
-      }
-      if ((target.waveCastTimer || 0) > 0) {
-        return final;
-      }
+    function applyEarthGuardianDamageMode(target, final, fixedDamage, reason) {
+      if (!target || target.baseId !== "earth_taesan" || fixedDamage) return final;
+      const lowHp = target.hp / Math.max(1, target.maxHp) <= 0.45;
+      const inWall = isInsideEarthBulwark(target);
+      const ratio = inWall ? 0.52 : lowHp ? 0.62 : 0.72;
+      const reduced = Math.max(1, Math.round(final * ratio));
 
-      const reduced = Math.max(1, Math.round(final * 0.55));
-      const stored = Math.max(1, Math.round(final * 0.72));
-      target.waveStored = Math.min(260, (target.waveStored || 0) + stored);
-
-      if ((target.waveStoreTextCd || 0) <= 0 && !isSustainedDamage(reason)) {
-        target.waveStoreTextCd = 1.0;
-        spawnFloatingText(target.x, target.y - target.r - 34, `해일축적 ${Math.round(target.waveStored)}`, "#7dd3fc");
+      if (!isSustainedDamage(reason) && Math.random() < 0.18) {
+        spawnFloatingText(target.x, target.y - target.r - 34, inWall ? "성벽방어" : "대지방어", "#facc15");
       }
       return reduced;
-    }
-
-    function waveGuardianMaxRadius(stored) {
-      return clamp(112 + stored * 0.50, 118, 248);
-    }
-
-    function waveGuardianPower(f, stored) {
-      return Math.max(14, Math.round((f.attack || 9) * 1.10 + stored * 0.22));
     }
 
     function isZenWeakeningDamage(reason) {
@@ -4022,7 +4017,7 @@
         final = Math.max(1, final - 3);
       }
 
-      final = applyWaveGuardianDamageMode(target, final, fixedDamage, reason);
+      final = applyEarthGuardianDamageMode(target, final, fixedDamage, reason);
 
             // 젠의 독에 감염된 상대가 젠에게 주는 직접 피해는 1 감소한다.
       // 고정피해/지속피해/장판형 피해는 제외한다.
@@ -4204,7 +4199,7 @@
         final = Math.max(1, Math.round(final * 0.65));
       }
 
-      final = applyWaveGuardianDamageMode(target, final, fixedDamage, reason);
+      final = applyEarthGuardianDamageMode(target, final, fixedDamage, reason);
 
             if (trySiaCloneEscape(target, source, final, reason)) {
         target.hitsTaken += 1;
@@ -4786,7 +4781,6 @@
 
     function currentSpeed(f) {
       if ((f.joltStop || 0) > 0) return 0;
-      if (f.baseId === "tidal_maru" && (f.waveCastTimer || 0) > 0) return 0;
       if (f.baseId === "wind_rio") {
         ensureRioPermanentVelocity(f);
       }
@@ -4862,42 +4856,31 @@
           break;
         }
 
-        case "tidal_maru": {
-          const stored = Math.max(10, Math.round(f.waveStored || 0));
-          const maxR = waveGuardianMaxRadius(stored);
-          const power = waveGuardianPower(f, stored);
-
-          f.waveSavedVx = f.vx;
-          f.waveSavedVy = f.vy;
-          f.vx = 0;
-          f.vy = 0;
-          f.waveCastTimer = 1.35;
-          f.waveWeakPending = 3.0;
-
+        case "earth_taesan": {
+          beginCastPause(f, 0.38);
           zones.push({
-            kind: "wavePulse",
+            kind: "earthBulwark",
             sourceId: f.id,
             x: f.x,
             y: f.y,
-            r: 0,
-            maxR,
-            life: 1.35,
-            maxLife: 1.35,
+            r: 148,
+            life: 4.1,
+            maxLife: 4.1,
             tick: 0,
-            color: "#38bdf8",
-            power,
-            slow: 1.25,
-            foamSeed: rand(0, 1000),
-            hitIds: new Set()
+            pulse: 0.18,
+            color: "#a16207",
+            power: 8,
+            wallPower: 3,
+            hitCd: {},
+            expelledIds: new Set()
           });
-          spawnBlast(f.x, f.y, Math.min(maxR, 130), "#38bdf8");
-          spawnParticles(f.x, f.y, "#bae6fd", 34);
-          spawnFloatingText(f.x, f.y - f.r - 44, `해일 ${stored}`, "#bae6fd");
-          f.waveStored = 0;
+          spawnBlast(f.x, f.y, 92, "#a16207");
+          spawnParticles(f.x, f.y, "#facc15", 28);
+          spawnFloatingText(f.x, f.y - f.r - 44, "성벽진", "#fde68a");
           f.skillClock = 0;
-          f.skillCooldown = 0.2;
-          playSound("shield", 1.12);
-          log(`${sourceName} 해일반동 방출`, "스킬");
+          f.skillCooldown = 0.55;
+          playSound("shield", 1.05);
+          log(`${sourceName} 성벽진 전개`, "스킬");
           break;
         }
 
@@ -5451,11 +5434,6 @@
       f.skillClock += dt;
       f.skillCooldown = Math.max(0, f.skillCooldown - dt);
 
-      if (f.baseId === "tidal_maru" && ((f.waveWeakTimer || 0) > 0 || (f.waveCastTimer || 0) > 0)) {
-        f.skillClock = 0;
-        return;
-      }
-
       if (f.skillCooldown > 0) return;
 
       switch (f.baseId) {
@@ -5465,8 +5443,8 @@
         case "steel_moro":
           if (f.shieldHp <= 0 && f.wallBouncesSkill >= 5) useSkill(f);
           break;
-        case "tidal_maru":
-          if ((f.waveWeakTimer || 0) <= 0 && (f.waveCastTimer || 0) <= 0 && f.skillClock >= 16.0 && (f.waveStored || 0) >= 10) useSkill(f);
+        case "earth_taesan":
+          if (f.skillClock >= 7.8) useSkill(f);
           break;
         case "blue_noa":
           if (f.skillClock >= 6) useSkill(f);
@@ -5568,24 +5546,7 @@
       f.jinBarrierContactCd = Math.max(0, (f.jinBarrierContactCd || 0) - dt);
       f.jinChargeTextCd = Math.max(0, (f.jinChargeTextCd || 0) - dt);
       f.jinWallShockCd = Math.max(0, (f.jinWallShockCd || 0) - dt);
-      const waveCastBefore = f.waveCastTimer || 0;
-      const waveWeakBefore = f.waveWeakTimer || 0;
-      f.waveCastTimer = Math.max(0, (f.waveCastTimer || 0) - dt);
-      f.waveWeakTimer = Math.max(0, (f.waveWeakTimer || 0) - dt);
-      if (f.baseId === "tidal_maru" && waveCastBefore > 0 && (f.waveCastTimer || 0) <= 0 && (f.waveWeakPending || 0) > 0) {
-        f.waveWeakTimer = Math.max(f.waveWeakTimer || 0, f.waveWeakPending || 0);
-        f.waveWeakPending = 0;
-        const a = rand(0, Math.PI * 2);
-        const speed = f.baseSpeed * 18;
-        f.vx = Math.cos(a) * speed;
-        f.vy = Math.sin(a) * speed;
-        spawnFloatingText(f.x, f.y - f.r - 38, "약점", "#fca5a5");
-      }
-      if (f.baseId === "tidal_maru" && waveWeakBefore > 0 && (f.waveWeakTimer || 0) <= 0 && (f.waveCastTimer || 0) <= 0) {
-        f.skillClock = 0;
-        spawnFloatingText(f.x, f.y - f.r - 38, "피해감소", "#7dd3fc");
-      }
-      f.waveStoreTextCd = Math.max(0, (f.waveStoreTextCd || 0) - dt);
+      f.earthDustCd = Math.max(0, (f.earthDustCd || 0) - dt);
       f.swordTimer = Math.max(0, (f.swordTimer || 0) - dt);
       if (f.attackBoost !== 9999) f.attackBoost = Math.max(0, f.attackBoost - dt);
 
@@ -5711,18 +5672,6 @@
       if ((f.vampSuppressed || 0) > 0) {
         f.vx = 0;
         f.vy = 0;
-        return;
-      }
-
-      if (f.baseId === "tidal_maru" && (f.waveCastTimer || 0) > 0) {
-        f.vx = 0;
-        f.vy = 0;
-        if (Math.random() < dt * 32) {
-          const a = rand(0, Math.PI * 2);
-          const r = rand(f.r + 8, f.r + 38);
-          spawnParticles(f.x + Math.cos(a) * r, f.y + Math.sin(a) * r, "#bae6fd", 1);
-        }
-        checkSkill(f, dt);
         return;
       }
 
@@ -6160,6 +6109,10 @@
           z.x = source.x;
           z.y = source.y;
         }
+        if (z.kind === "earthBulwark") {
+          z.x = source.x;
+          z.y = source.y;
+        }
         if (z.kind === "slash" && z.followSource) {
           z.x = source.x;
           z.y = source.y;
@@ -6169,10 +6122,6 @@
           z.y = source.y;
           z.angle = (z.angle || 0) + dt * 11.5;
           if (!z.hitCd) z.hitCd = {};
-        }
-        if (z.kind === "wavePulse" && (source.waveCastTimer || 0) > 0) {
-          z.x = source.x;
-          z.y = source.y;
         }
 
         if (z.kind === "delayedBlast") {
@@ -6389,17 +6338,86 @@
               spawnHitFlash(e.x, e.y, z.color, 42);
             }
           });
+        } else if (z.kind === "earthBulwark") {
+          z.pulse = (z.pulse || 0) - dt;
+          z.tick = (z.tick || 0) - dt;
+          if (!z.hitCd) z.hitCd = {};
+          if (!z.expelledIds) z.expelledIds = new Set();
+
+          if (z.tick <= 0) {
+            z.tick = 0.55;
+            heal(source, 1.2);
+          }
+
+          enemiesOf(source).forEach(e => {
+            const dx = e.x - z.x;
+            const dy = e.y - z.y;
+            const d = Math.max(1, Math.hypot(dx, dy));
+            const wallR = z.r || 148;
+            const insideLimit = wallR + e.r;
+            const now = battleTime;
+
+            // 발동 시 안에 있거나, 어떤 이유로든 안쪽으로 들어오면 성벽 밖으로 추방한다.
+            if (d < insideLimit) {
+              const cd = z.hitCd[e.id] || 0;
+              const firstExpel = !z.expelledIds.has(e.id);
+              const targetR = wallR + e.r + 7;
+              e.x = clamp(z.x + dx / d * targetR, arena.x + e.r, arena.x2 - e.r);
+              e.y = clamp(z.y + dy / d * targetR, arena.y + e.r, arena.y2 - e.r);
+              e.vx = dx / d * Math.max(260, Math.abs(e.vx) + 190);
+              e.vy = dy / d * Math.max(260, Math.abs(e.vy) + 190);
+
+              if (firstExpel || now >= cd) {
+                damage(e, firstExpel ? z.power : (z.wallPower || 3), source, firstExpel ? "성벽추방" : "성벽충돌");
+                applyFreeze(e, firstExpel ? 0.45 : 0.22);
+                spawnHitFlash(e.x, e.y, z.color, firstExpel ? 52 : 34);
+                spawnFloatingText(e.x, e.y - e.r - 26, firstExpel ? "추방" : "튕겨남", "#fde68a");
+                z.hitCd[e.id] = now + 0.55;
+                z.expelledIds.add(e.id);
+              }
+            } else if (d < wallR + e.r + 14) {
+              // 성벽 바깥쪽에서 부딪히면 안으로 들어오지 못하고 바깥으로 튕긴다.
+              const cd = z.hitCd[e.id] || 0;
+              const targetR = wallR + e.r + 12;
+              e.x = clamp(z.x + dx / d * targetR, arena.x + e.r, arena.x2 - e.r);
+              e.y = clamp(z.y + dy / d * targetR, arena.y + e.r, arena.y2 - e.r);
+              e.vx = dx / d * Math.max(220, Math.abs(e.vx) + 150);
+              e.vy = dy / d * Math.max(220, Math.abs(e.vy) + 150);
+
+              if (now >= cd) {
+                damage(e, z.wallPower || 3, source, "성벽충돌");
+                applyFreeze(e, 0.18);
+                spawnHitFlash(e.x, e.y, z.color, 30);
+                spawnFloatingText(e.x, e.y - e.r - 26, "성벽충돌", "#fde68a");
+                z.hitCd[e.id] = now + 0.75;
+              }
+            }
+          });
+
+          if (z.pulse <= 0) {
+            z.pulse = 0.42;
+            z.pulseIndex = (z.pulseIndex || 0) + 1;
+            if ((source.earthDustCd || 0) <= 0) {
+              source.earthDustCd = 0.18;
+              for (let k = 0; k < 5; k++) {
+                const a = rand(0, Math.PI * 2);
+                const rr = rand(source.r + 14, z.r);
+                spawnParticles(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr, k % 2 ? "#facc15" : "#a16207", 1);
+              }
+            }
+          }
         } else if (z.kind === "wavePulse") {
-          const progress = clamp(1 - z.life / Math.max(0.1, z.maxLife || 1.35), 0, 1);
-          const ease = 1 - Math.pow(1 - progress, 2.15);
-          const currentR = (z.maxR || z.r || 100) * ease;
+          const progress = clamp(1 - z.life / Math.max(0.1, z.maxLife || 2.25), 0, 1);
+          const ease = progress < 0.16 ? progress * 2.6 : 0.42 + (progress - 0.16) / 0.84 * 0.58;
+          const currentR = (z.maxR || z.r || 100) * clamp(ease, 0, 1);
+          const lastR = z.lastR || 0;
           z.r = currentR;
           z.foamTick = (z.foamTick || 0) - dt;
           if (z.foamTick <= 0) {
-            z.foamTick = 0.055;
-            for (let k = 0; k < 3; k++) {
+            z.foamTick = 0.045;
+            for (let k = 0; k < 5; k++) {
               const a = rand(0, Math.PI * 2);
-              const rr = Math.max(14, currentR + rand(-10, 8));
+              const rr = Math.max(14, currentR + rand(-18, 14));
               spawnParticles(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr, k % 2 ? "#e0f2fe" : "#7dd3fc", 1);
             }
           }
@@ -6409,19 +6427,23 @@
             const dx = e.x - z.x;
             const dy = e.y - z.y;
             const d = Math.max(1, Math.hypot(dx, dy));
-            if (!z.hitIds.has(e.id) && d <= currentR + e.r) {
+            const waveWidth = z.waveWidth || 58;
+            const waveFront = currentR + e.r + 6;
+            const waveBack = Math.max(0, lastR - waveWidth);
+            if (!z.hitIds.has(e.id) && d <= waveFront && d >= waveBack) {
               z.hitIds.add(e.id);
               damage(e, z.power, source, "해일반동");
-              applyFreeze(e, z.slow || 1.25);
-              const pushDist = (z.maxR || currentR) + e.r + 8;
+              applyFreeze(e, z.slow || 1.45);
+              const pushDist = Math.min((z.maxR || currentR) + e.r + 14, Math.max(d + 48, currentR + e.r + 22));
               e.x = clamp(z.x + dx / d * pushDist, arena.x + e.r, arena.x2 - e.r);
               e.y = clamp(z.y + dy / d * pushDist, arena.y + e.r, arena.y2 - e.r);
-              e.vx += dx / d * 390;
-              e.vy += dy / d * 390;
-              spawnHitFlash(e.x, e.y, z.color, 62);
-              spawnFloatingText(e.x, e.y - e.r - 28, "쓸려남", "#bae6fd");
+              e.vx += dx / d * 520;
+              e.vy += dy / d * 520;
+              spawnHitFlash(e.x, e.y, z.color, 72);
+              spawnFloatingText(e.x, e.y - e.r - 28, "파도에 밀림", "#bae6fd");
             }
           });
+          z.lastR = currentR;
         } else if (z.kind === "poison") {
           if (z.tick <= 0) {
             z.tick = 0.65;
@@ -7729,61 +7751,66 @@
           ctx.arc(z.x, z.y, currentR * 0.82, 0, Math.PI * 2);
           ctx.stroke();
         } else if (z.kind === "wavePulse") {
-          const progress = clamp(1 - z.life / Math.max(0.1, z.maxLife || 1.35), 0, 1);
-          const ease = 1 - Math.pow(1 - progress, 2.15);
-          const currentR = (z.maxR || z.r || 100) * ease;
+          const progress = clamp(1 - z.life / Math.max(0.1, z.maxLife || 2.25), 0, 1);
+          const ease = progress < 0.16 ? progress * 2.6 : 0.42 + (progress - 0.16) / 0.84 * 0.58;
+          const currentR = (z.maxR || z.r || 100) * clamp(ease, 0, 1);
           const seed = z.foamSeed || 0;
+          const band = z.waveWidth || 58;
 
-          const grad = ctx.createRadialGradient(z.x, z.y, 2, z.x, z.y, Math.max(12, currentR));
-          grad.addColorStop(0, "rgba(240,249,255,.45)");
-          grad.addColorStop(0.28, "rgba(125,211,252,.30)");
-          grad.addColorStop(0.72, "rgba(14,165,233,.16)");
+          const grad = ctx.createRadialGradient(z.x, z.y, Math.max(2, currentR - band), z.x, z.y, Math.max(12, currentR + band));
+          grad.addColorStop(0, "rgba(2,132,199,.00)");
+          grad.addColorStop(0.40, "rgba(14,165,233,.15)");
+          grad.addColorStop(0.68, "rgba(125,211,252,.34)");
+          grad.addColorStop(0.84, "rgba(240,249,255,.56)");
           grad.addColorStop(1, "rgba(2,132,199,.00)");
-          ctx.globalAlpha = 0.28 + 0.18 * (1 - progress);
+          ctx.globalAlpha = 0.30 + 0.20 * (1 - progress);
           ctx.fillStyle = grad;
           ctx.beginPath();
-          ctx.arc(z.x, z.y, currentR, 0, Math.PI * 2);
+          const outerWaveR = Math.max(2, currentR + band * 0.75);
+          const innerWaveR = Math.max(1, Math.min(outerWaveR - 1, currentR - band * 0.55));
+          ctx.arc(z.x, z.y, outerWaveR, 0, Math.PI * 2);
+          ctx.arc(z.x, z.y, innerWaveR, 0, Math.PI * 2, true);
           ctx.fill();
 
-          for (let ring = 0; ring < 4; ring++) {
-            const rr = currentR * (1 - ring * 0.16) + Math.sin(battleTime * 9 + seed + ring) * 4;
+          for (let ring = 0; ring < 5; ring++) {
+            const rr = currentR - band * 0.36 + ring * (band * 0.19) + Math.sin(battleTime * 9 + seed + ring) * 4;
             if (rr <= 5) continue;
-            ctx.globalAlpha = (0.88 - ring * 0.16) * (1 - progress * 0.25);
-            ctx.strokeStyle = ring === 0 ? "#e0f2fe" : ring === 1 ? "#bae6fd" : "#38bdf8";
-            ctx.lineWidth = ring === 0 ? 7 : ring === 1 ? 4 : 2.5;
+            ctx.globalAlpha = (0.86 - ring * 0.10) * (1 - progress * 0.18);
+            ctx.strokeStyle = ring === 3 ? "#e0f2fe" : ring === 2 ? "#bae6fd" : "#38bdf8";
+            ctx.lineWidth = ring === 3 ? 8 : ring === 2 ? 5 : 2.4;
             ctx.beginPath();
             ctx.arc(z.x, z.y, rr, 0, Math.PI * 2);
             ctx.stroke();
           }
 
           ctx.lineCap = "round";
-          for (let i = 0; i < 26; i++) {
-            const a = seed + i * (Math.PI * 2 / 26) + Math.sin(battleTime * 5 + i) * 0.10;
+          for (let i = 0; i < 34; i++) {
+            const a = seed + i * (Math.PI * 2 / 34) + Math.sin(battleTime * 5 + i) * 0.12;
             const wave = Math.sin(seed + battleTime * 7 + i * 1.9);
-            const rr = currentR * (0.82 + wave * 0.045);
-            const len = 10 + 12 * (0.5 + 0.5 * Math.sin(seed + i * 2.1));
-            ctx.globalAlpha = 0.36 + 0.26 * (1 - progress);
-            ctx.strokeStyle = i % 3 === 0 ? "rgba(240,249,255,.96)" : "rgba(125,211,252,.82)";
-            ctx.lineWidth = i % 3 === 0 ? 3.5 : 2.2;
+            const rr = currentR + wave * band * 0.22;
+            const len = 16 + 18 * (0.5 + 0.5 * Math.sin(seed + i * 2.1));
+            ctx.globalAlpha = 0.42 + 0.28 * (1 - progress);
+            ctx.strokeStyle = i % 3 === 0 ? "rgba(240,249,255,.96)" : "rgba(125,211,252,.86)";
+            ctx.lineWidth = i % 3 === 0 ? 4.2 : 2.5;
             ctx.beginPath();
             ctx.moveTo(z.x + Math.cos(a) * Math.max(8, rr - len), z.y + Math.sin(a) * Math.max(8, rr - len));
             ctx.lineTo(z.x + Math.cos(a) * (rr + len), z.y + Math.sin(a) * (rr + len));
             ctx.stroke();
 
             if (i % 4 === 0) {
-              ctx.globalAlpha = 0.64 * (1 - progress * 0.45);
-              ctx.fillStyle = "rgba(240,249,255,.90)";
+              ctx.globalAlpha = 0.70 * (1 - progress * 0.35);
+              ctx.fillStyle = "rgba(240,249,255,.92)";
               ctx.beginPath();
-              ctx.arc(z.x + Math.cos(a) * (rr + len + 5), z.y + Math.sin(a) * (rr + len + 5), 2.2 + (i % 5), 0, Math.PI * 2);
+              ctx.arc(z.x + Math.cos(a) * (rr + len + 7), z.y + Math.sin(a) * (rr + len + 7), 2.6 + (i % 5), 0, Math.PI * 2);
               ctx.fill();
             }
           }
 
-          ctx.globalAlpha = 0.30 * (1 - progress * 0.35);
+          ctx.globalAlpha = 0.26 * (1 - progress * 0.25);
           ctx.strokeStyle = "#0ea5e9";
-          ctx.lineWidth = 24;
+          ctx.lineWidth = band * 0.48;
           ctx.beginPath();
-          ctx.arc(z.x, z.y, currentR * 0.70, 0, Math.PI * 2);
+          ctx.arc(z.x, z.y, Math.max(1, currentR - band * 0.12), 0, Math.PI * 2);
           ctx.stroke();
         } else if (z.kind === "poison") {
           ctx.globalAlpha = 0.26 + 0.14 * pulse;
@@ -8090,17 +8117,17 @@
       if (f.baseId === "hero_leon") {
         drawHeroLeonAura(f);
       }
-      if (f.baseId === "tidal_maru") {
-        const storedRatio = clamp((f.waveStored || 0) / 260, 0, 1);
-        if ((f.waveCastTimer || 0) > 0) {
-          drawRing(f.x, f.y, f.r + 16 + Math.sin(battleTime * 16) * 4, "rgba(224,242,254,.96)", 6);
-          drawRing(f.x, f.y, f.r + 34, "rgba(56,189,248,.55)", 3);
-        } else if ((f.waveWeakTimer || 0) > 0) {
-          drawRing(f.x, f.y, f.r + 11, "rgba(248,113,113,.80)", 4);
-          drawRing(f.x, f.y, f.r + 22, "rgba(127,29,29,.38)", 2);
+      if (f.baseId === "earth_taesan") {
+        const active = zones.some(z => z.kind === "earthBulwark" && z.sourceId === f.id && z.life > 0);
+        const low = f.hp / Math.max(1, f.maxHp) <= 0.45;
+        if (active) {
+          drawRing(f.x, f.y, f.r + 15 + Math.sin(battleTime * 12) * 3, "rgba(250,204,21,.92)", 5);
+          drawRing(f.x, f.y, f.r + 30, "rgba(161,98,7,.50)", 3);
+        } else if (low) {
+          drawRing(f.x, f.y, f.r + 12, "rgba(251,191,36,.78)", 4);
+          drawRing(f.x, f.y, f.r + 22, "rgba(120,53,15,.44)", 2);
         } else {
-          drawRing(f.x, f.y, f.r + 10 + storedRatio * 10, "rgba(125,211,252,.82)", 3 + storedRatio * 4);
-          drawRing(f.x, f.y, f.r + 24 + storedRatio * 22, "rgba(14,165,233,.28)", 2);
+          drawRing(f.x, f.y, f.r + 10, "rgba(161,98,7,.64)", 3);
         }
       }
       if (f.shieldHp > 0) {
