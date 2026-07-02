@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>원형 아레나 v168</title>
+  <title>원형 아레나 v169</title>
   <style>
     :root {
       --bg: #020617;
@@ -825,7 +825,7 @@
 </head>
 <body>
   <header>
-    <h1 id="mainTitle">원형 아레나 v168</h1>
+    <h1 id="mainTitle">원형 아레나 v169</h1>
     <p>자동 전투 시뮬레이터</p>
   </header>
 
@@ -1018,9 +1018,9 @@
         skillName: "영구 철벽반사", condition: "방패 없을 때 벽 충돌 5회", desc: "방패, 반격, 성장, 후려치기."
       },
       {
-        id: "earth_taesan", name: "대지수호 태산", mark: "山", role: "수호자", color: "#92400e",
-        hp: 260, attack: 12, speed: 0.25, range: 0,
-        skillName: "대지격노", condition: "60초 소용돌이 이동 후 전체기", desc: "외곽에서 중앙으로 천천히 감겨 들어가며 피해를 축적한다."
+        id: "guardian_mihail", name: "성기사 미하일", mark: "✦", role: "수호자", color: "#facc15",
+        hp: 158, attack: 12, speed: 2.35, range: 82,
+        skillName: "로열 가드", condition: "쿨마다 패링 자세", desc: "패링 성공 시 피해무시, 회복, 광역반격, 강화."
       },
       {
         id: "wind_rio", name: "바람발 리오", mark: "風", role: "암살자", color: "#22c55e",
@@ -1303,6 +1303,7 @@
     }
 
     const patchNotes = [
+      "v169: 태산 삭제. 신규 수호자 미하일 추가. 로열가드 패링, 2차 폭발, 라이트 포스레이 구현.",
       "v168: 태산을 초저속 소용돌이 이동형으로 변경. 60초 동안 외곽에서 중앙으로 감겨 들어간 뒤 전체기 사용.",
       "v167: 태산을 이동불가 수호자로 리워크. 성벽진 삭제, 투사체 취약, 60초 전장 전체기 3단계 추가.",
       "v166: 태산 성벽진 범위 추가 너프, 사용 중 태산 고정, 자힐 삭제, 벽돌 외곽선 이펙트 강화.",
@@ -1426,10 +1427,10 @@
           tick: "없음",
           tip: "방패 중 반격."
         },
-        earth_taesan: {
-          damage: "지진 / 대지진 / 화산폭발",
-          tick: "투사체 피해 증가",
-          tip: "매우 느린 고정 소용돌이 경로로 움직인다. 60초 뒤 중앙에서 전체기를 쓴다."
+        guardian_mihail: {
+          damage: "로열가드 / 성광폭발 / 라이트 포스레이",
+          tick: "패링 성공 시 피해무시·회복",
+          tip: "피해를 받아내면 광역 반격 후 강화된다. 강화 중 접촉 실패 시 빛의 검기를 쏜다."
         },
         wind_rio: {
           damage: "질풍돌파 10~15 / 풍압충돌 2~5",
@@ -1582,7 +1583,7 @@
 
     const characterDisplayOrder = [
       "dummy_unit",
-      "flame_tori", "steel_moro", "earth_taesan", "wind_rio", "healer_mina", "poison_zen",
+      "flame_tori", "steel_moro", "guardian_mihail", "wind_rio", "healer_mina", "poison_zen",
       "blink_dodo", "purple_sia", "rage_baro", "artillery_brik",
       "vampire_luka", "chain_nox", "thunder_jin", "hero_leon"
     ];
@@ -1832,6 +1833,11 @@
         taesanStoredDamage: 0,
         taesanSpiralAngleBase: null,
         taesanSpiralCycle: 0,
+        mihailParry: 0,
+        mihailEmpowered: 0,
+        mihailContactReady: false,
+        mihailForceRayCast: 0,
+        mihailForceRayFired: false,
         poisonTicks: [],
         burningTicks: [],
         freeze: 0,
@@ -2521,7 +2527,7 @@
         hero_leon: { type: "hero", max: 20.0, label: "성장" },
         thunder_jin: { type: "time", max: 30.0, label: "과전류" },
 
-        earth_taesan: { type: "time", max: 60.0, label: "대지격노" },
+        guardian_mihail: { type: "time", max: 14.0, label: "로열 가드" },
 
         steel_moro:  { type: "wall", max: 5, label: "방패 조건" },
         wind_rio:    { type: "wall", max: 3, label: "질풍돌파" },
@@ -2577,11 +2583,11 @@
           const lightRemain = Math.max(0, 3.8 - (f.minaLightClock || 0));
           text += ` · 정화 ${lightRemain <= 0 ? "준비됨" : lightRemain.toFixed(1) + "초"}${isInMinaGarden(f) ? " · 성역 안" : ""}`;
         }
-        if (f.baseId === "earth_taesan") {
-          const stored = Math.round(f.taesanStoredDamage || 0);
-          const quake = taesanQuakeInfo(stored);
-          const spiralPct = Math.round(clamp((f.skillClock || 0) / 60, 0, 1) * 100);
-          text += ` · 소용돌이 ${spiralPct}% · 축적 ${stored} · 다음 ${quake.name}`;
+        if (f.baseId === "guardian_mihail") {
+          if ((f.mihailParry || 0) > 0) text = `로열 가드 · 패링 ${f.mihailParry.toFixed(1)}초`;
+          else if ((f.mihailForceRayCast || 0) > 0) text = `라이트 포스레이 · ${f.mihailForceRayCast.toFixed(1)}초`;
+          else if ((f.mihailEmpowered || 0) > 0) text = `성광 강화 · 접촉폭발 ${f.mihailEmpowered.toFixed(1)}초`;
+          else text += " · 패링 대기";
         }
         if (f.baseId === "rage_baro") {
           const missing = baroMissingRatio(f);
@@ -2901,7 +2907,7 @@
     }
 
     function isCollisionDamage(reason) {
-      return ["질풍돌파", "풍압충돌", "분신충돌", "회전격", "불사회전격", "피의난타", "철벽후려치기", "철벽충돌", "용사검격", "초보검사검격", "견습기사검격", "기사검격", "전설원공격", "전설검기", "용사절반참"].includes(reason);
+      return ["질풍돌파", "풍압충돌", "분신충돌", "회전격", "불사회전격", "피의난타", "철벽후려치기", "철벽충돌", "용사검격", "초보검사검격", "견습기사검격", "기사검격", "전설원공격", "전설검기", "용사절반참", "로열가드", "성광폭발"].includes(reason);
     }
 
     function isFixedDamage(reason) {
@@ -2910,70 +2916,65 @@
       return ["철벽반사", "햇빛"].includes(reason);
     }
 
-    function isProjectileDamageReason(reason) {
-      return [
-        "매직미사일", "파이어볼", "관통저격", "전류탄", "독안개", "독가스",
-        "흡혈구슬", "달빛표식", "화염마법", "전설검기", "황금난사"
-      ].includes(reason);
+    function royalGuardBlast(source, power = null, radius = 108, label = "로열가드", color = "#facc15") {
+      if (!source || !source.alive) return;
+      const dmg = Math.max(6, Math.round(power ?? source.attack * 1.08));
+      enemiesOf(source).forEach(e => {
+        const dx = e.x - source.x;
+        const dy = e.y - source.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        if (d <= radius + e.r) {
+          damage(e, dmg, source, label);
+          e.vx += dx / d * 250;
+          e.vy += dy / d * 250;
+          applyFreeze(e, 0.28);
+          spawnHitFlash(e.x, e.y, color, 58);
+        }
+      });
+      spawnBlast(source.x, source.y, radius, color);
+      spawnParticles(source.x, source.y, color, 28);
+      spawnFloatingText(source.x, source.y - source.r - 42, label, color);
+      playSound("shield", 1.12);
     }
 
-    function taesanQuakeInfo(stored = 0) {
-      const s = Math.max(0, Math.round(stored || 0));
-      if (s >= 190) return { level: 3, name: "화산폭발", power: clamp(Math.round(28 + s * 0.075), 32, 54), color: "#fb923c", slow: 1.15, burn: true };
-      if (s >= 95) return { level: 2, name: "대지진", power: clamp(Math.round(18 + s * 0.060), 22, 36), color: "#facc15", slow: 0.85, burn: false };
-      return { level: 1, name: "지진", power: clamp(Math.round(10 + s * 0.045), 10, 18), color: "#a16207", slow: 0.55, burn: false };
+    function fireMihailForceRay(source) {
+      if (!source || !source.alive) return;
+      const target = nearestEnemy(source).enemy;
+      if (!target) return;
+      const a = Math.atan2(target.y - source.y, target.x - source.x);
+      shootAngle(source, a, source.attack * 1.55, 8.8, 12, "라이트포스레이", "#facc15", {
+        pierce: 3,
+        life: 2.25,
+        trail: 42,
+        glow: 86
+      });
+      spawnBlast(source.x, source.y, 54, "#fef3c7");
+      spawnFloatingText(source.x, source.y - source.r - 42, "라이트 포스레이", "#fde68a");
+      playSound("magic", 1.08);
+      log(`<strong>${escapeHtml(source.name)}</strong> 라이트 포스레이 발사`, "스킬");
     }
 
-    function taesanSpiralTarget(f) {
-      const c = arenaCenter();
-      if (f.taesanSpiralAngleBase === null || f.taesanSpiralAngleBase === undefined) {
-        f.taesanSpiralAngleBase = rand(0, Math.PI * 2);
-      }
-      const progress = clamp((f.skillClock || 0) / 60, 0, 1);
-      const outerR = Math.max(90, arena.size * 0.42 - f.r);
-      const radius = outerR * (1 - progress);
-      const turns = 1.35;
-      const angle = f.taesanSpiralAngleBase + progress * Math.PI * 2 * turns;
-      return {
-        x: clamp(c.x + Math.cos(angle) * radius, arena.x + f.r, arena.x2 - f.r),
-        y: clamp(c.y + Math.sin(angle) * radius, arena.y + f.r, arena.y2 - f.r)
-      };
+    function triggerMihailParry(target, source, reason) {
+      if (!target || !target.alive || target.baseId !== "guardian_mihail") return false;
+      if ((target.mihailParry || 0) <= 0) return false;
+      if (["로열가드", "성광폭발", "라이트포스레이"].includes(reason)) return false;
+
+      target.mihailParry = 0;
+      target.mihailEmpowered = 5.8;
+      target.mihailContactReady = true;
+      target.mihailForceRayCast = 0;
+      const got = heal(target, Math.max(5, Math.round(target.maxHp * 0.055)));
+      if (got > 0) spawnFloatingText(target.x, target.y - target.r - 54, `가드회복 +${got}`, "#bbf7d0");
+      royalGuardBlast(target, target.attack * 1.10, 112, "로열가드", "#facc15");
+      spawnFloatingText(target.x, target.y - target.r - 72, "패링 성공", "#fef3c7");
+      log(`<strong>${escapeHtml(target.name)}</strong> 로열 가드 성공`, "방어");
+      return true;
     }
 
-    function updateTaesanSpiralMovement(f, dt, resetOuter = false) {
-      if (!f || !f.alive || f.baseId !== "earth_taesan") return;
-      if (resetOuter) {
-        f.taesanSpiralCycle = (f.taesanSpiralCycle || 0) + 1;
-        f.taesanSpiralAngleBase = (f.taesanSpiralAngleBase === null || f.taesanSpiralAngleBase === undefined)
-          ? rand(0, Math.PI * 2)
-          : f.taesanSpiralAngleBase + Math.PI * 0.72;
-      }
-      const prevX = f.x;
-      const prevY = f.y;
-      const target = taesanSpiralTarget(f);
-      f.x = target.x;
-      f.y = target.y;
-      if (dt > 0) {
-        f.vx = (f.x - prevX) / dt;
-        f.vy = (f.y - prevY) / dt;
-      } else {
-        f.vx = 0;
-        f.vy = 0;
-      }
-      if ((f.earthDustCd || 0) <= 0 && Math.random() < 0.65) {
-        f.earthDustCd = 0.32;
-        spawnParticles(f.x, f.y, "#a16207", 1);
-      }
-    }
-
-    function applyTaesanDamageMode(target, final, fixedDamage, reason) {
-      if (!target || target.baseId !== "earth_taesan" || fixedDamage) return final;
-      if (isProjectileDamageReason(reason)) {
-        const boosted = Math.max(1, Math.round(final * 1.45));
-        if (Math.random() < 0.28) spawnFloatingText(target.x, target.y - target.r - 34, "투사체 취약", "#fecaca");
-        return boosted;
-      }
-      return final;
+    function applyRoyalGuardDamageMode(target, final, fixedDamage, reason, source = null) {
+      if (!target || target.baseId !== "guardian_mihail" || fixedDamage) return final;
+      if (triggerMihailParry(target, source, reason)) return 0;
+      return Math.max(1, Math.round(final * 0.92));
     }
     function isZenWeakeningDamage(reason) {
       return !isFixedDamage(reason) && !isSustainedDamage(reason);
@@ -4066,7 +4067,7 @@
         final = Math.max(1, final - 3);
       }
 
-      final = applyTaesanDamageMode(target, final, fixedDamage, reason);
+      final = applyRoyalGuardDamageMode(target, final, fixedDamage, reason, source);
 
             // 젠의 독에 감염된 상대가 젠에게 주는 직접 피해는 1 감소한다.
       // 고정피해/지속피해/장판형 피해는 제외한다.
@@ -4183,7 +4184,7 @@
       target.hp -= final;
       const actualDamage = Math.min(final, hpBeforeDamage);
       target.damageTaken = (target.damageTaken || 0) + actualDamage;
-      if (target.baseId === "earth_taesan") target.taesanStoredDamage = Math.min(420, (target.taesanStoredDamage || 0) + actualDamage);
+      
       if (source && source.alive && source !== target) source.damageDealt = (source.damageDealt || 0) + actualDamage;
       heroLeonOnDamaged(target, source, reason);
 
@@ -4249,7 +4250,7 @@
         final = Math.max(1, Math.round(final * 0.65));
       }
 
-      final = applyTaesanDamageMode(target, final, fixedDamage, reason);
+      final = applyRoyalGuardDamageMode(target, final, fixedDamage, reason, source);
 
             if (trySiaCloneEscape(target, source, final, reason)) {
         target.hitsTaken += 1;
@@ -4265,7 +4266,7 @@
       target.hp -= final;
       const actualBodyDamage = Math.min(final, hpBeforeBodyDamage);
       target.damageTaken = (target.damageTaken || 0) + actualBodyDamage;
-      if (target.baseId === "earth_taesan") target.taesanStoredDamage = Math.min(420, (target.taesanStoredDamage || 0) + actualBodyDamage);
+      
       if (source && source.alive && source !== target) source.damageDealt = (source.damageDealt || 0) + actualBodyDamage;
       heroLeonOnDamaged(target, source, reason);
       target.hitsTaken += 1;
@@ -4832,7 +4833,7 @@
 
     function currentSpeed(f) {
       if ((f.joltStop || 0) > 0) return 0;
-      if (f.baseId === "earth_taesan") return f.baseSpeed * 44;
+      if (f.baseId === "guardian_mihail" && (f.mihailForceRayCast || 0) > 0) return 0;
       if (f.baseId === "wind_rio") {
         ensureRioPermanentVelocity(f);
       }
@@ -4908,36 +4909,17 @@
           break;
         }
 
-        case "earth_taesan": {
-          const stored = Math.round(f.taesanStoredDamage || 0);
-          const quake = taesanQuakeInfo(stored);
-          const center = arenaCenter();
-
-          enemiesOf(f).forEach(e => {
-            damage(e, quake.power, f, quake.name);
-            applyFreeze(e, quake.slow);
-            const dx = e.x - f.x;
-            const dy = e.y - f.y;
-            const d = Math.max(1, Math.hypot(dx, dy));
-            if (quake.level >= 2) {
-              e.vx += dx / d * (quake.level === 3 ? 360 : 240);
-              e.vy += dy / d * (quake.level === 3 ? 360 : 240);
-              capVelocity(e, e.baseSpeed * 44 * (quake.level === 3 ? 1.45 : 1.18));
-            }
-            if (quake.burn) applyBurn(e, f, 4, 3.2, 0.55, 6, "volcano");
-            spawnHitFlash(e.x, e.y, quake.color, quake.level === 3 ? 72 : 52);
-          });
-
-          zones.push({ kind: "taesanQuake", sourceId: f.id, x: center.x, y: center.y, r: arena.size * 0.72, life: 1.45, maxLife: 1.45, tick: 0, color: quake.color, level: quake.level, name: quake.name, stored });
-          spawnBlast(f.x, f.y, quake.level === 3 ? 170 : quake.level === 2 ? 135 : 105, quake.color);
-          spawnParticles(f.x, f.y, quake.color, quake.level === 3 ? 60 : 38);
-          spawnFloatingText(f.x, f.y - f.r - 48, `${quake.name} ${stored}`, quake.color);
-          f.taesanStoredDamage = 0;
+        case "guardian_mihail": {
+          f.mihailParry = 0.78;
+          f.mihailContactReady = false;
+          f.mihailForceRayCast = 0;
           f.skillClock = 0;
-          f.skillCooldown = 0.8;
-          updateTaesanSpiralMovement(f, 0, true);
-          playSound(quake.level === 3 ? "fireball" : "shield", 1.18);
-          log(`${sourceName} ${quake.name} 발동 · 축적 ${stored}`, "스킬");
+          f.skillCooldown = 1.0;
+          beginCastPause(f, 0.18);
+          spawnBlast(f.x, f.y, 46, "#fef3c7");
+          spawnFloatingText(f.x, f.y - f.r - 40, "로열 가드", "#fde68a");
+          playSound("shield", 1.05);
+          log(`${sourceName} 로열 가드 준비`, "스킬");
           break;
         }
 
@@ -5500,8 +5482,8 @@
         case "steel_moro":
           if (f.shieldHp <= 0 && f.wallBouncesSkill >= 5) useSkill(f);
           break;
-        case "earth_taesan":
-          if (f.skillClock >= 60.0) useSkill(f);
+        case "guardian_mihail":
+          if (f.skillClock >= 14.0 && (f.mihailParry || 0) <= 0 && (f.mihailEmpowered || 0) <= 0 && (f.mihailForceRayCast || 0) <= 0) useSkill(f);
           break;
         case "blue_noa":
           if (f.skillClock >= 6) useSkill(f);
@@ -5604,13 +5586,32 @@
       f.jinChargeTextCd = Math.max(0, (f.jinChargeTextCd || 0) - dt);
       f.jinWallShockCd = Math.max(0, (f.jinWallShockCd || 0) - dt);
       f.earthDustCd = Math.max(0, (f.earthDustCd || 0) - dt);
+      f.mihailParry = Math.max(0, (f.mihailParry || 0) - dt);
+      const mihailEmpBefore = f.mihailEmpowered || 0;
+      f.mihailEmpowered = Math.max(0, (f.mihailEmpowered || 0) - dt);
+      f.mihailForceRayCast = Math.max(0, (f.mihailForceRayCast || 0) - dt);
+      if (f.baseId === "guardian_mihail" && mihailEmpBefore > 0 && (f.mihailEmpowered || 0) <= 0 && f.mihailContactReady) {
+        f.mihailContactReady = false;
+        f.mihailForceRayCast = 0.45;
+        beginCastPause(f, 0.45);
+        spawnFloatingText(f.x, f.y - f.r - 42, "빛 집속", "#fde68a");
+      }
       f.swordTimer = Math.max(0, (f.swordTimer || 0) - dt);
       if (f.attackBoost !== 9999) f.attackBoost = Math.max(0, f.attackBoost - dt);
 
-      if (f.baseId === "earth_taesan") {
-        updateTaesanSpiralMovement(f, dt);
-        checkSkill(f, dt);
-        return;
+      if (f.baseId === "guardian_mihail") {
+        if ((f.mihailForceRayCast || 0) > 0) {
+          f.vx = 0;
+          f.vy = 0;
+          if ((f.mihailForceRayCast || 0) <= 0.05 && !f.mihailForceRayFired) {
+            f.mihailForceRayFired = true;
+            fireMihailForceRay(f);
+          }
+          checkSkill(f, dt);
+          return;
+        } else {
+          f.mihailForceRayFired = false;
+        }
       }
 
       if (f.baseId === "blink_dodo" && updateDodoVoid(f, dt)) {
@@ -5858,21 +5859,14 @@
             const ny = dy / d;
             const overlap = minD - d;
 
-            if (a.baseId === "earth_taesan" || b.baseId === "earth_taesan") {
-              const taesan = a.baseId === "earth_taesan" ? a : b;
-              const other = taesan === a ? b : a;
-              const sign = taesan === a ? 1 : -1;
-              other.x += nx * overlap * sign;
-              other.y += ny * overlap * sign;
-              taesan.vx = 0;
-              taesan.vy = 0;
-
-              const ovn = other.vx * nx + other.vy * ny;
-              if ((taesan === a && ovn < 0) || (taesan === b && ovn > 0)) {
-                other.vx -= 2 * ovn * nx;
-                other.vy -= 2 * ovn * ny;
+            if (areEnemies(a, b)) {
+              const mihail = a.baseId === "guardian_mihail" ? a : b.baseId === "guardian_mihail" ? b : null;
+              if (mihail && (mihail.mihailEmpowered || 0) > 0 && mihail.mihailContactReady) {
+                mihail.mihailContactReady = false;
+                mihail.mihailEmpowered = 0;
+                mihail.mihailForceRayCast = 0;
+                royalGuardBlast(mihail, mihail.attack * 1.18, 118, "성광폭발", "#fde68a");
               }
-              continue;
             }
 
             const aCasting = isCasting(a);
@@ -8253,33 +8247,24 @@
       if (f.baseId === "hero_leon") {
         drawHeroLeonAura(f);
       }
-      if (f.baseId === "earth_taesan") {
-        const storedRatio = clamp((f.taesanStoredDamage || 0) / 420, 0, 1);
-        const c = arenaCenter();
-
-        ctx.save();
-        ctx.globalAlpha = 0.12 + storedRatio * 0.10;
-        ctx.strokeStyle = "#a16207";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([8, 10]);
-        ctx.beginPath();
-        const base = f.taesanSpiralAngleBase === null || f.taesanSpiralAngleBase === undefined ? 0 : f.taesanSpiralAngleBase;
-        const outerR = Math.max(90, arena.size * 0.42 - f.r);
-        for (let i = 0; i <= 80; i++) {
-          const t = i / 80;
-          const rr = outerR * (1 - t);
-          const a = base + t * Math.PI * 2 * 1.35;
-          const x = c.x + Math.cos(a) * rr;
-          const y = c.y + Math.sin(a) * rr;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+      if (f.baseId === "guardian_mihail") {
+        if ((f.mihailParry || 0) > 0) {
+          drawRing(f.x, f.y, f.r + 12, "rgba(254,243,199,.96)", 6);
+          drawRing(f.x, f.y, f.r + 25, "rgba(250,204,21,.55)", 3);
+          ctx.save();
+          ctx.translate(f.x, f.y - f.r - 8);
+          ctx.strokeStyle = "rgba(254,243,199,.95)";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(-8, 0); ctx.lineTo(8, 0); ctx.moveTo(0, -8); ctx.lineTo(0, 8);
+          ctx.stroke();
+          ctx.restore();
+        } else if ((f.mihailEmpowered || 0) > 0) {
+          drawRing(f.x, f.y, f.r + 13 + Math.sin(battleTime * 12) * 3, "rgba(250,204,21,.90)", 5);
+          drawRing(f.x, f.y, f.r + 30, "rgba(254,243,199,.35)", 2);
+        } else {
+          drawRing(f.x, f.y, f.r + 9, "rgba(250,204,21,.44)", 2);
         }
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-
-        drawRing(f.x, f.y, f.r + 10 + storedRatio * 12, "rgba(161,98,7,.70)", 3 + storedRatio * 3);
-        drawRing(f.x, f.y, f.r + 24 + storedRatio * 18, "rgba(250,204,21,.26)", 2);
       }
       if (f.shieldHp > 0) {
         drawRing(f.x, f.y, f.r + 8, "rgba(203,213,225,.95)", 5);
